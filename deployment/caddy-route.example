@@ -1,0 +1,9 @@
+# Insert inside the existing ingress route before its catch-all proxy.
+# Preserve the existing Gitee /mcp and /auth/callback routes.
+@task_mailbox path /mailbox/* /.well-known/oauth-authorization-server/mailbox /.well-known/oauth-protected-resource/mailbox/mcp
+request_body @task_mailbox {
+    max_size 4MB
+}
+reverse_proxy @task_mailbox 127.0.0.1:8766 {
+    header_up X-Forwarded-Proto https
+}

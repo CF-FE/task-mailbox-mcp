@@ -1,0 +1,35 @@
+[Unit]
+Description=Persistent MCP task mailbox
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=task-mailbox
+Group=task-mailbox
+WorkingDirectory=/opt/task-mailbox
+EnvironmentFile=/etc/task-mailbox/service.env
+ExecStart=/opt/task-mailbox/.venv/bin/python /opt/task-mailbox/server.py
+Restart=on-failure
+RestartPreventExitStatus=78
+RestartSec=5
+UMask=0077
+StateDirectory=task-mailbox
+StateDirectoryMode=0700
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/task-mailbox
+MemoryHigh=192M
+MemoryMax=256M
+CPUQuota=50%
+TasksMax=32
+LimitNOFILE=256
+LogRateLimitIntervalSec=60s
+LogRateLimitBurst=20
+StandardOutput=null
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

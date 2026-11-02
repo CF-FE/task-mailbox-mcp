@@ -1,0 +1,18 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "task-mailbox",
+  "version": "0.1.0",
+  "description": "Persistent task and result exchange for cloud and local clients.",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Task Mailbox",
+        "shortDescription": "Durable tasks and results",
+        "longDescription": "Submit and read durable task records and versioned results. Does not execute tasks or automatically wake local agents.",
+        "category": "Productivity",
+        "capabilities": [],
+        "defaultPrompt": "Read the current mailbox task by its original job ID."
+      }
+    }
+  }
+}

@@ -1,0 +1,3 @@
+# Merge this one entry; preserve all existing client configuration.
+[mcp_servers.task-mailbox]
+url = "https://mcp.example.com/mailbox/mcp"
