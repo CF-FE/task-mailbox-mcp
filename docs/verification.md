@@ -156,3 +156,9 @@ systemd 模板的 `MemoryHigh=192M`、`MemoryMax=256M`、`CPUQuota=50%`、`Tasks
 ### CF-FE 本仓复测
 
 主执行侧在本 CF-FE 工作区使用既有独立 Mac 解释器执行 `python -m unittest discover -s tests -q`，104 项全部通过。服务与 Mac 代码来自上述固定闭包；本地复测不等于此新提交已安装，实际源码提交与运行回执在后续部署记录补充。
+
+### 固定组织与 Mac 维护路径落地
+
+公子进一步明确固定的是 GitHub 组织 `CF-FE`：各项目仍使用独立仓库，Task Mailbox 使用本仓。Mac 已从本仓固定提交 `652406bf09ed589285942293129215d35363a19e` 安装，11 个运行文件摘要与本仓一致；原生 launchd 回读 running，新的 collector=OK／成功时点，持久 cursor 与待发记录保留。
+
+本地观察范围继续只有 Herdr 与信箱项目；后者路径已从个人整合副本切到本 CF-FE 工作区。端点、消费者身份、数据库和专用 OAuth 缓存未变。原数据验证会话绑定已存入私密迁移回执并解除，旧 job／payload／hash／结果和事件未改写，避免继续把历史个人仓测试引用提示成当前正式任务。CF-FE Issue 创建及读回来自原 GitHub 连接，没有修改应用权限或换凭据；原个人仓403独立保留。

@@ -4,6 +4,8 @@
 
 ## 资料与状态各归其主
 
+GitHub 默认组织固定为 `CF-FE`。这是组织约束，不是让所有项目共用一个仓库：各项目的仓库、Issue 和正式 Project 沿各自项目合同绑定；Task Mailbox 自有任务使用 `CF-FE/task-mailbox-mcp`。写入前读取实际 owner，个人账号、工作目录和部署副本不能替代该核对。
+
 Task Mailbox 自身的代码、文档、配置、Skill、插件和 Issue 的唯一维护仓为 [CF-FE/task-mailbox-mcp](https://github.com/CF-FE/task-mailbox-mcp)。本地目录名、个人整合仓或历史部署来源不能改变这个目标；个人整合仓只留历史部署副本。其他项目依其原 CF-FE 仓库及 Project 任务合同维护，不把所有业务任务都放入本服务仓。
 
 本轮新增实现已从个人整合仓固定来源 `9d36feb436264f2c0a065be7e644043a930a98dd` 接回本仓：复制时 47 个来源文件 hash 一致，保留初始基线 `7d162860c10ac2d72719522be7fe01478f4747a3`；逐文件来源见 [source-updates.json](source-updates.json)。本次接收的固定提交尚待主执行侧提交，当前工作区接收不等于本仓新提交已部署。

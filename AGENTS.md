@@ -1,5 +1,7 @@
 # 开发约定
 
+- GitHub 默认组织固定为 `CF-FE`，项目各用自己的仓库和正式 Projects 引用；本服务仓为 `CF-FE/task-mailbox-mcp`，其他项目任务依其合同路由，不全部落到本仓。
+
 - 唯一项目维护仓固定为 `CF-FE/task-mailbox-mcp`：本项目代码、文档、Skill、插件、配置模板与 Issue 均在此维护；写入前核对 origin 和准确仓库引用。个人 `create-network-sh` 的部署整合目录仅保留历史副本与来源记录，不从本地 cwd 推定新维护落点。
 - 称呼用户为“公子”或“您”。先读 README、SPEC；部署与状态分别以 `docs/deployment.md`、`docs/verification.md` 为准。
 - 本服务是确定性持久信箱。保持任务收发与执行分离，不隐式加入 shell、Herdr 控制、Agent 调用、后台拉取或自动唤醒；新增执行能力须有明确任务范围。
