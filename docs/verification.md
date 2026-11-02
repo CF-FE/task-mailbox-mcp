@@ -163,3 +163,9 @@ systemd 模板的 `MemoryHigh=192M`、`MemoryMax=256M`、`CPUQuota=50%`、`Tasks
 公子进一步明确固定的是 GitHub 组织 `CF-FE`：各项目仍使用独立仓库，Task Mailbox 使用本仓。Mac 已从本仓固定提交 `652406bf09ed589285942293129215d35363a19e` 安装，11 个运行文件摘要与本仓一致；原生 launchd 回读 running，新的 collector=OK／成功时点，持久 cursor 与待发记录保留。
 
 本地观察范围继续只有 Herdr 与信箱项目；后者路径已从个人整合副本切到本 CF-FE 工作区。端点、消费者身份、数据库和专用 OAuth 缓存未变。原数据验证会话绑定已存入私密迁移回执并解除，旧 job／payload／hash／结果和事件未改写，避免继续把历史个人仓测试引用提示成当前正式任务。CF-FE Issue 创建及读回来自原 GitHub 连接，没有修改应用权限或换凭据；原个人仓403独立保留。
+
+### 自然认证停机与受控恢复
+
+在上述常驻运行之后，本地 2026-11-02 23:51:34 观察到 collector=AUTH_FAILED／CLIENT_UNAVAILABLE、进程退出 1，上一成功时点为 23:51:02；待处理事件与报告均为 0。仅凭该健康码不能断言具体 401、refresh、用户拒绝或令牌失效。
+
+主执行侧仅检查本桥自己的加密缓存元数据：token／refresh token／client／discovery 均存在，本机 expiry 仍有约 6 小时；这些元数据不证明服务端必然接受。随后使用原缓存做一次有界只读 whoami，实际三个 MCP POST 均为 200、工具成功，没有 token 请求或交互登录。基于这条新的验权证据，主执行侧显式 kickstart 原单元一次；历史失败根因仍为 UNKNOWN，不能把一次恢复提升为长期稳定性。未改 TLS、代理、端点或凭据，未重发任务。
