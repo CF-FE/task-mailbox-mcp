@@ -6,9 +6,9 @@
 
 更新：2026-11-02，Asia/Shanghai。本服务代码、文档、配置、Skill、插件和 Issue 的唯一维护仓固定为 `CF-FE/task-mailbox-mcp`，初始基线 `7d162860c10ac2d72719522be7fe01478f4747a3` 保留。其他项目依其原 CF-FE 仓库／Project 任务合同维护；本地目录及部署整合来源不能据以改投个人仓，也不把其他业务统一归入本服务仓。
 
-本轮从个人整合仓固定来源 `9d36feb436264f2c0a065be7e644043a930a98dd` 接回 47 个服务文件，排除个人整合记录 `INTEGRATION.md`／`import-manifest.json`；复制时来源 hash 一致，逐文件基线见 [source-updates.json](source-updates.json)。本页随后进行归属与权限更正，来源记录保留复制时字节。本次接收的固定提交尚待主执行侧提交，本仓新提交的部署未验；个人整合仓只保留历史部署副本。
+本轮从个人整合仓固定来源 `9d36feb436264f2c0a065be7e644043a930a98dd` 接回 47 个服务文件，排除个人整合记录 `INTEGRATION.md`／`import-manifest.json`；复制时来源 hash 一致，逐文件基线见 [source-updates.json](source-updates.json)。本页随后进行归属与权限更正，来源记录保留复制时字节。本次接收已提交为 `652406bf09ed589285942293129215d35363a19e`，组织规则增量为 `3add47a`，均已推送本仓；个人整合仓只保留历史部署副本。
 
-以下现场回执沿原执行侧保留：VPS 运行快照仍来自个人整合仓 `a06dc70e7994df7cb3c92a30cfde4276c26a5759`；Mac 初始实现来源为 `10c2030d6be54c617b53d6ae86a38335975f1b3a`，实际安装快照为 `6386d7fa7ba1780adf10bd20af0e669f2f389a5a`，11 个源码／依赖清单文件摘要回读一致。`9d36feb436264f2c0a065be7e644043a930a98dd` 是来源验证基线，不是本仓已部署 HEAD。本轮回仓不改变 runtime 或 OAuth；后续安装的 sourceCommit 须按实际固定提交与回执记录。除特别标明，现场证据由主执行侧直接取得。
+当前 Mac 实际安装固定为本仓 `652406bf09ed589285942293129215d35363a19e`，11 个运行文件摘要回读一致；登录自启、原生 launchd running 和新的 collector=OK 成功时点已回读。观察范围仍为 Herdr／信箱两个项目，信箱路径已切到本 CF-FE 工作区，原数据验证临时绑定已归档解除，数据库／旧 job／hash／事件／结果／专用 OAuth 未变。VPS 运行代码快照仍为原部署 `a06dc70e7994df7cb3c92a30cfde4276c26a5759`，本轮未重启或替换 VPS 服务。旧 Mac `6386d7f` 及来源 `9d36feb` 作为历史快照保留，不冒称当前来源；除特别标明，现场证据由主执行侧直接取得。
 
 | 层次 | 状态 | 已有证据与范围 |
 | --- | --- | --- |
@@ -30,7 +30,7 @@
 | Mac Kimi OAuth／工具发现 | NOT_RUN | 未启动 Kimi 新会话、登录或发现 |
 | 原 nonce 结果交付与 Dot 读取 | PASS | Mac 桥收件／原事件上传 v1，当前桌面会话经云端 App 读全核摘要／nonce 并 ACK；公子另报告指定 Dot 已读取并确认，主执行侧实际回读该精确 job／版本／hash 的独立稳定 ACK 事件。Dot 行为归用户回报，事件持久记录为主执行侧直接取证；Mac 随后实际收取该 ACK，原游标推进且待处理／回传均为 0 |
 | 双向 nonce 全覆盖 | PARTIAL | 上述原任务链路已通过；原任务由桌面会话经云端 App 提交，不能冒称 Dot 发起。Mac 新建任务、Dot 回报的反方向尚未执行 |
-| Mac 本地实现与测试（来源版本） | PASS | 来源版本已有完整 104 项测试回执：原 Store 17、台账 20、collector 17、hook 10、CLI／安装 6、浏览器交接／日志 4、引用校验 21、关联综合 9；主执行侧在独立 Mac 环境执行通过。本仓接收后的复测结果另行记录 |
+| Mac 本地实现与本仓复测 | PASS | 本仓完整 104 项测试已由主执行侧在既有独立 Mac 环境复跑通过：原 Store 17、台账 20、collector 17、hook 10、CLI／安装 6、浏览器交接／日志 4、引用校验 21、关联综合 9 |
 | Mac 桥独立安装 | PASS | 独立源码副本、摘要回读、0700 运行目录、0600 配置／钩子定义、实际 SQLite 状态回读及 plist lint；没有启动模型／Herdr／业务 handler |
 | Mac 桥依赖与加密客户端初始化 | PASS | Python 3.13.1 x86_64，FastMCP 4.0.11、MCP 2.3.0、cryptography 48.0.1，共 66 依赖；临时目录中实际构造客户端、私密权限与缺缓存拒绝测试通过，无外部请求 |
 | Codex App 原生钩子触发（已观察四类） | PASS | 公子已审阅并信任已安装定义；主执行侧直接回读本地 live 台账，session 与本对话对应，观察到 SessionStart／PreToolUse／PostToolUse／UserPromptSubmit。只覆盖实际观察的四类，不推定其余三类或 CLI 模型回合已触发 |
@@ -38,6 +38,7 @@
 | Mac 桥真实网络收件／回传 | PASS | collector 实际接收原 JOB_PERSISTED，get_job 核原 ID／payload 摘要；小结果先本地安全保存并入 outbox，再以原 event_id 上传，回执精确匹配 v1／hash。当前桌面会话经云端 App 实际读全并核对原结果后 ACK；无模型／业务派发 |
 | Mac 人工收件窗口 | PASS | 手动运行 120 秒，启动 3 轮；结束时 collector=OK、待处理事件／报告均为 0，进程已自然退出。只证明此短窗口，不提升为长期在线 |
 | Mac 持续收件进程 | PASS | 公子明确授权推进后，用户 launchd 已 bootstrap；RunAtLoad=true、KeepAlive=false，原生回读 running／PID 及新的 collector=OK 成功时点。网络错误由进程内退避，认证／协议错误停止；没有异常退出自动重启或长期稳定性验收 |
+| CF-FE 原 GitHub 连接写入 | PASS | 同一原连接实际创建并独立回读 CF-FE/task-mailbox-mcp Issue #1，关联原正式总览后回读 Repository=CF-FE/task-mailbox-mcp、Status=In Progress；未改 OAuth 权限或换凭据。个人整合仓403不推广为CF-FE授权故障 |
 | Herdr／模型／业务执行 | NOT_RUN | 信箱没有执行能力；进程、HTTP 或数据闭环均不代替业务验收 |
 
 VPS 当前运行时为 Python 3.14.4、FastMCP 4.0.11、MCP 2.3.0、uvicorn 0.54.0。真实端点、账号、插件 ID、原始输出及认证状态留在私密落点，公开文档只用别名。
