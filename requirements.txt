@@ -1,0 +1,4 @@
+# Matches the framework versions directly inspected on the target VPS.
+fastmcp==4.0.11
+mcp==2.3.0
+uvicorn==0.54.0
