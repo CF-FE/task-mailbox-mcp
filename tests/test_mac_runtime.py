@@ -7,11 +7,13 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'mac'))
 from bridge_store import BridgeStore
-from install import install
+from config import DEFAULT_CONFIG
+from install import EVENTS, HOOK_LABEL, LABEL, install, main as install_main, merged_hooks
 
 
 class MacRuntimeTests(unittest.TestCase):
@@ -73,6 +75,7 @@ class MacRuntimeTests(unittest.TestCase):
         self.assertTrue((runtime / 'app/codex_hook.py').is_file())
         with launch.open('rb') as stream:
             plist = plistlib.load(stream)
+        self.assertEqual('io.maccoordinationbridge.coordinator', plist['Label'])
         self.assertFalse(plist['KeepAlive'])
         self.assertFalse(plist['RunAtLoad'])
         self.assertFalse(result['start_at_login'])
@@ -131,6 +134,60 @@ class MacRuntimeTests(unittest.TestCase):
         self.assertFalse(plist['KeepAlive'])
         self.assertTrue(json.loads((runtime / 'install-receipt.json').read_text())['start_at_login'])
         self.assertEqual('not executed', (runtime / '.venv/bin/python').read_text())
+
+    def test_legacy_hooks_upgrade_once_and_preserve_all_external_definitions(self):
+        old_label = 'Task Mailbox local coordination'
+        external = {'type': 'command', 'command': 'keep-external', 'statusMessage': 'External hook', 'async': True}
+        opaque_external = {'type': 'command', 'command': 'keep-opaque-external', 'statusMessage': {'external': 'metadata'}}
+        original = {'description': 'external metadata', 'hooks': {}}
+        for event in EVENTS:
+            original['hooks'][event] = [
+                {'matcher': 'external-match', 'description': 'keep-group', 'hooks': [
+                    external, opaque_external, {'type': 'command', 'command': 'old-bridge', 'statusMessage': old_label}]},
+                {'hooks': [{'type': 'command', 'command': 'old-duplicate', 'statusMessage': old_label}]},
+                {'hooks': [{'type': 'command', 'command': 'new-duplicate', 'statusMessage': HOOK_LABEL}]},
+                {'matcher': 'unused-external', 'description': 'keep-empty-group', 'hooks': []}]
+        original['hooks']['PreCompact'] = [{'matcher': 'manual', 'hooks': [external]}]
+        before = json.dumps(original, sort_keys=True)
+
+        upgraded = merged_hooks(original, 'new-bridge-command')
+
+        self.assertEqual(before, json.dumps(original, sort_keys=True))
+        self.assertEqual(upgraded, merged_hooks(upgraded, 'new-bridge-command'))
+        self.assertEqual('external metadata', upgraded['description'])
+        self.assertEqual(original['hooks']['PreCompact'], upgraded['hooks']['PreCompact'])
+        self.assertEqual(7, len(EVENTS))
+        for event in EVENTS:
+            groups = upgraded['hooks'][event]
+            self.assertEqual({'matcher': 'external-match', 'description': 'keep-group', 'hooks': [external, opaque_external]}, groups[0])
+            self.assertEqual(original['hooks'][event][-1], groups[1])
+            owned = [handler for group in groups for handler in group['hooks']
+                     if handler.get('statusMessage') in (old_label, HOOK_LABEL)]
+            self.assertEqual(1, len(owned))
+            self.assertEqual('Mac Coordination Bridge local coordination', owned[0]['statusMessage'])
+            self.assertEqual('new-bridge-command', owned[0]['command'])
+
+    def test_default_configuration_and_launch_agent_use_mac_coordination_bridge(self):
+        self.assertEqual(Path.home() / 'Library/Application Support/MacCoordinationBridge/config.json', DEFAULT_CONFIG)
+        self.assertEqual('io.maccoordinationbridge.coordinator', LABEL)
+        args = self.prepare_install_args()
+        runtime, state, endpoint, roots, hooks, _, commit = args
+        home = self.root / 'new-home'
+        output = io.StringIO()
+        with patch.object(Path, 'home', return_value=home):
+            with patch.object(sys, 'argv', ['install', '--runtime-dir', str(runtime),
+                    '--state-dir', str(state), '--endpoint', endpoint, '--allowed-root', roots[0],
+                    '--hook-file', str(hooks), '--source-commit', commit]):
+                with contextlib.redirect_stdout(output):
+                    install_main()
+        launch = home / 'Library/LaunchAgents/io.maccoordinationbridge.coordinator.plist'
+        plist = plistlib.loads(launch.read_bytes())
+        self.assertEqual(LABEL, plist['Label'])
+        self.assertFalse(plist['KeepAlive'])
+        self.assertFalse(plist['RunAtLoad'])
+        self.assertFalse((home / 'Library/LaunchAgents/io.taskmailbox.coordinator.plist').exists())
+        self.assertEqual('PREPARED_NOT_BOOTSTRAPPED', json.loads(output.getvalue())['launch_agent'])
+        self.assertEqual('REVIEW_REQUIRED', json.loads(output.getvalue())['hook_trust'])
 
     def test_install_rejects_mismatched_existing_launch_unit_before_replacing_files(self):
         args = self.prepare_install_args()

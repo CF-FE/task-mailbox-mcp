@@ -10,8 +10,9 @@ import plistlib
 import shlex
 import tempfile
 
-LABEL = 'io.taskmailbox.coordinator'
-HOOK_LABEL = 'Task Mailbox local coordination'
+LABEL = 'io.maccoordinationbridge.coordinator'
+HOOK_LABEL = 'Mac Coordination Bridge local coordination'
+OWNED_HOOK_LABELS = (HOOK_LABEL, 'Task Mailbox local coordination')
 EVENTS = ('SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop', 'Interrupt', 'SessionEnd')
 
 
@@ -29,8 +30,8 @@ def merged_hooks(existing, command):
             if not isinstance(group, dict) or not isinstance(group.get('hooks'), list):
                 raise ValueError('existing hook group must contain handlers')
             handlers = [handler for handler in group['hooks']
-                        if not (isinstance(handler, dict) and handler.get('statusMessage') == HOOK_LABEL)]
-            if handlers:
+                        if not (isinstance(handler, dict) and handler.get('statusMessage') in OWNED_HOOK_LABELS)]
+            if handlers or not group['hooks']:
                 kept.append({**group, 'hooks': handlers})
         own = {'hooks': [{'type': 'command', 'command': command, 'timeout': 3,
                           'statusMessage': HOOK_LABEL}]}

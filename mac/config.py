@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from urllib.parse import urlsplit
 
-DEFAULT_CONFIG = Path.home() / 'Library/Application Support/TaskMailbox/config.json'
+DEFAULT_CONFIG = Path.home() / 'Library/Application Support/MacCoordinationBridge/config.json'
 
 
 def load_config(path=DEFAULT_CONFIG):

@@ -2,7 +2,7 @@
 
 本目录实现 [事件与钩子方案](../docs/hooks.md) 的本地收件、会话感知和结果补传。VPS 九项工具契约不变；本桥不调用模型、Herdr、任意 shell 或任务携带的回调 URL。
 
-本地组件统一称为 **Mac 协调桥（Mac Coordination Bridge）**，远端信箱及 MCP 插件称为 **Task Mailbox**。本次只更改组件称谓与程序提示。既有安装目录 `TaskMailbox`、launchd 标识 `io.taskmailbox.coordinator`、已信任钩子标签 `Task Mailbox local coordination` 保留为兼容安装标识；它们均指本地桥，不是云端插件。钩子定义无需因改名重新生成或信任。
+本地组件统一称为 **Mac 协调桥（Mac Coordination Bridge）**，远端信箱及 MCP 插件称为 **Task Mailbox**。运行目录使用 `~/Library/Application Support/MacCoordinationBridge`，launchd 标识为 `io.maccoordinationbridge.coordinator`，钩子标签为 `Mac Coordination Bridge local coordination`。旧 `TaskMailbox` 路径及标识只作为历史迁移记录保留，不作为第二个收件入口。
 
 既有 OAuth 注册的客户端名称仍可能显示历史名称 `Task Mailbox Mac Bridge`；当前授权沿原专用缓存使用，新的注册使用 `Mac Coordination Bridge`。不为修改显示名重建注册或重新授权。
 
@@ -22,11 +22,11 @@
 已验证的 Mac 依赖环境为 Python 3.13.1（x86_64）、FastMCP 4.0.11、MCP 2.3.0、cryptography 48.0.1；[Mac 独立锁定文件](requirements.lock.macos-py313.txt)与 VPS Linux 清单分开。只使用适合本机 Python／架构的二进制依赖，不为安装桥改动系统 Rust。仅使用本地盘。以下路径均为占位示例，运行时凭据、真实端点和配置不进入仓库：
 
 ```bash
-python3.13 -m venv "$HOME/Library/Application Support/TaskMailbox/.venv"
-"$HOME/Library/Application Support/TaskMailbox/.venv/bin/python" -m pip install -r mac/requirements.lock.macos-py313.txt
+python3.13 -m venv "$HOME/Library/Application Support/MacCoordinationBridge/.venv"
+"$HOME/Library/Application Support/MacCoordinationBridge/.venv/bin/python" -m pip install -r mac/requirements.lock.macos-py313.txt
 python3 mac/install.py \
-  --runtime-dir "$HOME/Library/Application Support/TaskMailbox" \
-  --state-dir "$HOME/Library/Application Support/TaskMailbox/state" \
+  --runtime-dir "$HOME/Library/Application Support/MacCoordinationBridge" \
+  --state-dir "$HOME/Library/Application Support/MacCoordinationBridge/state" \
   --endpoint https://mcp.example.com/mailbox/mcp \
   --allowed-root /absolute/path/to/herdr-project \
   --allowed-root /absolute/path/to/mailbox-repository \
@@ -61,13 +61,26 @@ python3 mac/install.py \
 新安装默认只准备单元。明确采用后台收件时，给安装命令增加 `--start-at-login`，生成 `RunAtLoad=true`、`KeepAlive=false`；升级会保留同一单元已开启的登录启动选项。安装器不自行加载或启动，随后执行用户级加载：
 
 ```bash
-launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/io.taskmailbox.coordinator.plist"
-launchctl print "gui/$(id -u)/io.taskmailbox.coordinator"
+launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/io.maccoordinationbridge.coordinator.plist"
+launchctl print "gui/$(id -u)/io.maccoordinationbridge.coordinator"
 ```
 
-`RunAtLoad=true` 使单元加载及以后登录时启动；进程中的 collector 保持轮询，网络错误按原预算退避。`KeepAlive=false` 让认证或协议错误停止后保持停止，修好后用 `launchctl kickstart "gui/$(id -u)/io.taskmailbox.coordinator"` 显式恢复；本轮不增加崩溃自恢复策略。停止并卸载用 `launchctl bootout "gui/$(id -u)/io.taskmailbox.coordinator"`。不要在 launchd 已收件时同时运行 `once`／`login`，先停止原网络写者；独立本地钩子照常记录。
+`RunAtLoad=true` 使单元加载及以后登录时启动；进程中的 collector 保持轮询，网络错误按原预算退避。`KeepAlive=false` 让认证或协议错误停止后保持停止，修好后用 `launchctl kickstart "gui/$(id -u)/io.maccoordinationbridge.coordinator"` 显式恢复；本轮不增加崩溃自恢复策略。停止并卸载用 `launchctl bootout "gui/$(id -u)/io.maccoordinationbridge.coordinator"`。不要在 launchd 已收件时同时运行 `once`／`login`，先停止原网络写者；独立本地钩子照常记录。
 
 本机已启用登录自启并回读后台 PID 与更新的成功收件时点，具体版本及覆盖见验证记录。单元没有打开 Mac 公网端口。Mac 睡眠时不能保证持续感知，恢复后沿原游标补读。
+
+## 从旧安装目录迁移
+
+已有台账的 `TaskMailbox` 安装须显式迁移，不能直接在新目录运行全新安装或只重命名虚拟环境。迁移先核目标目录、原启动项、七类自有 hook 和依赖锁定版本，准备私密配置／启动项／源码回退副本；不要复制另一套 OAuth 身份或创建新的信箱 consumer。
+
+1. 在最终新路径重建同版本 Python 环境及锁定依赖；先核依赖闭包与真实模块导入，旧桥继续沿原入口工作。[Python venv 的迁移限制](https://docs.python.org/3.13/library/venv.html#how-venvs-work)
+2. 卸载旧 launchd 单元，短暂移除本桥 owned hooks 以停止新本地写入，等在途 hook 退出并取得独占锁。保留其他 hook，不改 Codex 原生信任记录。
+3. 整体移动运行目录及原 `state/`，将新建环境放回最终新路径；逐一比较 SQLite 完整性／业务表和游标，以及 OAuth 密钥和加密值文件摘要；OAuth FileTree 的集合 `*-info.json` 元数据须只将 `directory` 从旧缓存路径映射到新路径，其余字段保持不变。历史证据中记录的旧绝对路径保持原文。
+4. 更新 `config.state_dir`、默认配置路径、hook 命令、launchd argv／WorkingDirectory／日志路径和安装凭据；端点、source_id、consumer_id、允许的项目根不变。安装器识别旧／新 hook 标签以去重，不为旧安装自动搬台账或加载第二个单元。
+5. 回读新配置和启动项，显式加载新单元；用原专用缓存确认实际 collector 成功、游标连续与待补传状态。认证失败保留原状态，不为迁移重新登录或换凭据。
+6. 更新后的 hook 定义须由公子在 Codex 设置“钩子”或 CLI `/hooks` 审阅并信任。路径改动改变定义 hash，旧信任不自动转移；在原生信任前标记 `REVIEW_REQUIRED`，不把人工调用脚本当作原生 hook 触发。
+
+旧启动项从 LaunchAgents 移到私密迁移备份中，旧环境及配置只作回退材料；新路径只有一份活动台账及 OAuth 缓存，不保留旧路径软链接或并行收件器。失败时先停止新单元，再恢复目录、旧环境、旧配置／hooks／plist，最后按原启动状态恢复原单元。实际迁移和原生信任状态统一见[验证记录](../docs/verification.md)。
 
 ## 绑定与报告
 
