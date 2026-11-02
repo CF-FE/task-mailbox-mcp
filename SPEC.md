@@ -2,6 +2,8 @@
 
 公子要求创建连接云端 Dot 与本地客户端的 MCP，部署在现有 VPS，并登记云端供两侧调用；源码、文档与占位配置独立维护。既有 Gitee 服务、网络与 Herdr 控制绑定不迁移。
 
+本项目维护与 Issue 目标固定为 `CF-FE/task-mailbox-mcp`；整合目录、机器或聊天位置不是仓库归属证据。其他项目任务仍绑定各自原仓库与正式 Project，不集中到本服务仓。
+
 ## 用户流程与边界
 
 1. Dot 或本地客户端持久提交带固定 `job_id` 的任务数据。
@@ -34,7 +36,7 @@
 
 `oauth_storage.py` 对持久 OAuth 值使用 Fernet 加密，派生密钥绑定稳定签名材料，重启后复用。专用后端目录默认保守拒写预算为 8 MiB／512 文件，分别通过 `TASK_MAILBOX_MAX_OAUTH_BYTES`、`TASK_MAILBOX_MAX_OAUTH_FILES` 配置。预算要求单进程唯一写者；它不是目录或宿主硬配额，不通过驱逐现有记录腾空间。
 
-公子需先创建独立 GitHub OAuth App，并在宿主 TTY 通过 `deployment/configure-private.py` 以 getpass 输入新 secret。脚本保留本服务已有签名密钥，只写权限 `0600` 的私密环境文件，不启动服务；不要求在聊天传凭据。这是尚缺的身份配置前置，不是再次请求已有部署授权。
+公子需先创建独立 GitHub OAuth App，并在宿主 TTY 通过 `deployment/configure-private.py` 以 getpass 输入新 secret。脚本保留本服务已有签名密钥，只写权限 `0600` 的私密环境文件，不启动服务；不要求在聊天传凭据。这是初次部署的身份配置前置；本轮已完成配置，实际授权状态见验证记录。
 
 现有 Gitee 域名／8765 端口保持；新服务的回环端口、HTTPS 路由与 OAuth callback 必须沿宿主实际配置核定后记录。新增路由前校验，保留原配置；不启动第二个冲突隧道或更换既有 URL。
 
@@ -42,7 +44,7 @@ systemd 模板使用 `MemoryHigh=192M`、`MemoryMax=256M`、`CPUQuota=50%`、`Ta
 
 ## 验证与交付
 
-1. 标准库 Store 行为测试：持久化、重复／冲突、并发、游标、结果版本／摘要、取消与读确认、资源配额、满库回滚与只读统计；当前 16 项通过。
+1. 标准库 Store 行为测试：持久化、重复／冲突、并发、游标、结果版本／摘要、取消与读确认、资源配额、满库回滚与只读统计；当前 17 项通过。
 2. 在独立依赖环境通过真实 MCP initialize、tools/list 与受保护访问验证。
 3. VPS 服务、HTTPS、OAuth、本地客户端、云端登记和双方 nonce 双向读写逐层记录。
 4. 只有 Dot 与指定本地客户端各自实际读取对应 nonce，才记双向链路通过；本机会话调用不能冒称 Dot 调用。
@@ -50,3 +52,18 @@ systemd 模板使用 `MemoryHigh=192M`、`MemoryMax=256M`、`CPUQuota=50%`、`Ta
 VPS 临时回环重跑已取得 9 工具、两个模拟客户端收发、账号拒绝和 OAuth discovery 的 `PASS`。OAuth 加密存储已由主执行侧在 VPS 临时目录、新独立依赖环境直接测试通过。这些均不代替生产 OAuth 或真实两端调用。当前状态以 [验证记录](docs/verification.md)为准。
 
 服务范围不包含模型回合、业务任务、故障注入、正式控制权迁移、主机重启或 24 小时稳定性验证。
+
+## 后续事件与 Codex App 钩子
+
+[事件与钩子方案](docs/hooks.md)已有 [Mac 实现](mac/README.md)：单 collector、原子本机收件／游标、项目关联、会话观察、显式 session/turn/job 报告和稳定 ID 补传。公子已授权推进这一范围，感知限定 Herdr 与信箱项目；生命周期钩子仅作适配器，不执行任意任务。VPS 九项工具契约、取消语义和认证边界保持不变，云端 Dot 唤醒及受控执行 handler 仍未实现。
+
+## GitHub Projects 关联增量
+
+ARCHITECTURE TRIAGE
+- Path: BOUNDARY_NOTE
+- Evidence: 现有 payload v1 完整持久化额外字段；Mac routing 原来只保留目标和报告路由，项目协作规范已有 Projects／Issues 权威入口。
+- Boundary impact: 新增可选 payload.tracking 的本机持久关联、项目会话绑定准入及 result.task_tracking；现有数据任务收发兼容，VPS 九工具与业务执行／写权不变。
+- Preserved: Projects／原任务持正式状态与验收，仓库存项目资产；Mac 只收件和补传，不新增 GitHub 凭据、自动写 API 或 AI。
+- Verification: 引用结构、不可变身份、绑定／暂存／Stop／outbox 连贯性与旧数据路径测试，以及真实条目引用的纯数据收件／回报。
+
+详细字段、Issue／Project draft 两类来源、沿用各项目 Iteration 和派发前核读见[关联契约](docs/projects.md)。引用中的 UNVERIFIED 状态不代替 GitHub 读回；读确认不自动完成或关闭任务。

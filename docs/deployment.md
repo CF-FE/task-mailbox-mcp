@@ -9,8 +9,8 @@
 | 项目 | 本次约束 |
 | --- | --- |
 | 既有 Gitee | 保留回环 `8765`、已登记 URL、认证和进程 |
-| 新服务监听 | 候选 `127.0.0.1:8766`，先核端口未占用 |
-| 外部 MCP 地址 | 候选 `https://<PUBLIC_HOST>/mailbox/mcp`，尚待真实集成验证 |
+| 新服务监听 | `127.0.0.1:8766`，首次启动前核端口未占用 |
+| 外部 MCP 地址 | `https://<PUBLIC_HOST>/mailbox/mcp`；占位主机名，路由已验、受保护工具待验 |
 | 公网入口 | 复用获准 HTTPS／反向代理能力，保留既有路径；不直接公开回环服务 |
 | 持久数据 | VPS 本机磁盘中的 SQLite、OAuth 状态及稳定密钥；不提交仓库、不放网络共享盘 |
 | 客户端 | 云端 Dot、Mac Codex／Kimi 使用同一个对外端点，各自完成 OAuth 授权 |
@@ -37,7 +37,7 @@ python3 -m venv .venv
 
 `smoke_mcp.py` 不接收参数；它使用临时回环端点与 StaticTokenVerifier 测试身份，只验证 MCP 协议与工具收发，不验证生产 OAuth 或真实云端客户端。
 
-`smoke_oauth_storage.py` 使用临时目录验证加密持久化、稳定密钥重开和拒写预算，不读生产 OAuth 数据。VPS 独立新环境现已创建，实际占用 125212 KiB（约 122.3 MiB），主执行侧已在该环境复跑两项 MCP／OAuth 存储测试通过；未启动常驻服务或改动入口。
+`smoke_oauth_storage.py` 使用临时目录验证加密持久化、稳定密钥重开和拒写预算，不读生产 OAuth 数据。VPS 独立新环境现已创建，实际占用 125212 KiB（约 122.3 MiB），主执行侧曾在该环境复跑两项 MCP／OAuth 存储测试通过；后续服务启动与客户端状态见[当前验证记录](verification.md)。
 
 应用进程使用专用低权限运行身份，状态目录只允许该身份及获准管理员访问。SQLite 使用本机持久磁盘、rollback journal 和同步 FULL；备份时使用 SQLite 支持的一致性方式，不把数据库复制到共享目录供多机并发读写。
 
@@ -67,7 +67,7 @@ python3 -m venv .venv
 
 为本服务建立独立 GitHub OAuth 应用及精确回调地址。`TASK_MAILBOX_PUBLIC_BASE_URL` 使用 `https://<PUBLIC_HOST>/mailbox`，末尾不加 `/mcp`；MCP 端点为 base URL 加 `/mcp`，OAuth 回调为 base URL 加 `/auth/callback`。公共前缀为 `/mailbox`。不能直接复用 Gitee 的 client ID、client secret、回调或认证状态。
 
-当前确实缺少这项新应用身份配置。公子先在 GitHub 创建独立 OAuth App，填写精确回调，再在 VPS 本地 TTY 使用交互辅助完成配置。按模板默认安装路径，命令为：
+初次部署时先在 GitHub 创建独立 OAuth App，填写精确回调，再在 VPS 本地 TTY 使用交互辅助完成配置。本轮公子已完成这项配置；以下是可复用步骤，不是当前待办。按模板默认安装路径，命令为：
 
 ```bash
 sudo /opt/task-mailbox/.venv/bin/python /opt/task-mailbox/configure-private.py
@@ -81,7 +81,7 @@ OAuth 配置缺失、主体限制缺失或回调配置无效时，服务必须 f
 
 ## 4. systemd 与回环服务
 
-使用本仓提供的 systemd 配置模板，明确应用工作目录、独立解释器、受限环境文件、持久状态目录及运行身份。入口命令使用独立解释器运行 `server.py`，由环境文件提供有效配置。进程仅监听回环地址，候选端口为 `8766`；单元应保留错误退出信息，宿主 journald 保留量须有界。
+使用本仓提供的 systemd 配置模板，明确应用工作目录、独立解释器、受限环境文件、持久状态目录及运行身份。入口命令使用独立解释器运行 `server.py`，由环境文件提供有效配置。进程仅监听回环地址，当前端口为 `8766`；单元应保留错误退出信息，宿主 journald 保留量须有界。
 
 模板设置 `MemoryHigh=192M`、`MemoryMax=256M`、`CPUQuota=50%`、`TasksMax=32`、`LimitNOFILE=256`。它们是保护上限，不表示服务只会使用某个固定资源量，也不证明在这些限制下已满足响应时间、恢复或长期稳定性。
 
@@ -101,7 +101,7 @@ systemd 的进程重启只恢复信箱服务，不触发任务执行，也不拉
 - MCP 的认证挑战与授权服务器发现可由真实客户端读取，回调不会落到 Gitee 或其他应用。
 - Streamable HTTP 的请求、会话与响应能穿过代理；HTTP 200 不能替代真实 MCP `initialize`、`tools/list` 和工具读写。
 
-带前缀的 OAuth discovery 已在临时回环测试通过；生产 HTTPS 与代理路径尚未实测，不应只凭模板宣布通过。先验证未认证访问受到保护，再在用户完成授权后验证允许主体；不要在公开命令、截图、日志或报告中粘贴访问令牌。
+带前缀的 OAuth discovery 已在临时回环测试通过；本轮生产 HTTPS 的两类 discovery、受保护 MCP 的 401 挑战和无凭据 token POST 已实测。真实授权后的 MCP 工具调用尚未通过，不应将路由样本宣布为整条链路通过。先验证未认证访问受到保护，再在用户完成授权后验证允许主体；不要在公开命令、截图、日志或报告中粘贴访问令牌。
 
 ## 6. 登记云端和 Mac 客户端
 

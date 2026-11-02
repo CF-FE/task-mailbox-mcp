@@ -1,0 +1,4 @@
+fastmcp==4.0.11
+mcp==2.3.0
+# Pinned private send hook used by metadata_transport.py.
+httpx2==2.16.0

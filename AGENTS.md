@@ -1,7 +1,9 @@
 # 开发约定
 
+- 唯一项目维护仓固定为 `CF-FE/task-mailbox-mcp`：本项目代码、文档、Skill、插件、配置模板与 Issue 均在此维护；写入前核对 origin 和准确仓库引用。个人 `create-network-sh` 的部署整合目录仅保留历史副本与来源记录，不从本地 cwd 推定新维护落点。
 - 称呼用户为“公子”或“您”。先读 README、SPEC；部署与状态分别以 `docs/deployment.md`、`docs/verification.md` 为准。
 - 本服务是确定性持久信箱。保持任务收发与执行分离，不隐式加入 shell、Herdr 控制、Agent 调用、后台拉取或自动唤醒；新增执行能力须有明确任务范围。
+- 后续项目协作按 [Projects 关联契约](docs/projects.md)：资产在所属仓库维护，派发前核读原正式 Project／任务正文及项目已有 Iteration；正常项目会话绑定与结构化报告必须保留 tracking。旧数据任务的收件兼容不授予项目执行权；信箱或 hook 不自动改写 Projects。
 - 同一任务使用原 `job_id` 对账，稳定事件 ID 用于重传去重；冲突拒绝、不覆盖，`UNKNOWN` 不自动重跑。取消请求、实际停止、结果报告、读取确认与业务验收分别记录。
 - SQLite 仅放本机持久磁盘；任务变更与事件在同一事务内提交。结果、小任务和校验边界由 Store 维护；认证与外部输入边界由 MCP 服务维护。
 - 默认单份任务／结果 1 MiB、主数据库 256 MiB、10000 个 job。任务数满额拒新 job，数据库满额无法持久化的写入明确失败，保留原数据与对账能力；不自动删除、清理、vacuum 或扩大预算。`mailbox_usage` 只返回使用量元数据，主数据库配额不包含 journal、OAuth、日志和依赖。

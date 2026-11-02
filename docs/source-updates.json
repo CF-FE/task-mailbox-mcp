@@ -1,0 +1,481 @@
+{
+  "schema_version": 1,
+  "updates": [
+    {
+      "schema_version": 1,
+      "authority": "User fixed project repository to CF-FE/task-mailbox-mcp; independent fixed-version handoff, no automatic sync",
+      "target_repository": "CF-FE/task-mailbox-mcp",
+      "target_base_commit": "7d162860c10ac2d72719522be7fe01478f4747a3",
+      "source_repository": "ghyghoo8/create-network-sh",
+      "source_commit": "9d36feb436264f2c0a065be7e644043a930a98dd",
+      "source_prefix": "fastmcp/task-mailbox/",
+      "excluded": [
+        "INTEGRATION.md",
+        "import-manifest.json"
+      ],
+      "files": [
+        {
+          "source_path": "fastmcp/task-mailbox/.env.example",
+          "path": ".env.example",
+          "git_mode": "100644",
+          "bytes": 752,
+          "sha256": "83fadbc9688d00905ac4b89bd26d3b0530a89661c4d7a5e6aa9c6647105688ab",
+          "previous_target_sha256": "83fadbc9688d00905ac4b89bd26d3b0530a89661c4d7a5e6aa9c6647105688ab",
+          "action": "unchanged"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/.gitignore",
+          "path": ".gitignore",
+          "git_mode": "100644",
+          "bytes": 184,
+          "sha256": "aa94306f614dd7875196b4741d7c73762255765389a5ca6cc0202885178e713c",
+          "previous_target_sha256": "aa94306f614dd7875196b4741d7c73762255765389a5ca6cc0202885178e713c",
+          "action": "unchanged"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/AGENTS.md",
+          "path": "AGENTS.md",
+          "git_mode": "100644",
+          "bytes": 3032,
+          "sha256": "ed29b03db34cacef7a4c3450ae91c8067b773fe0b74e91c0ee2b96724622a5a9",
+          "previous_target_sha256": "58b2c2cd3ac1c6792c264886d70164c61e4ff0872f360f0fa86b6176b2cf44aa",
+          "action": "update"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/README.md",
+          "path": "README.md",
+          "git_mode": "100644",
+          "bytes": 7372,
+          "sha256": "96af94cdcbb7c486035e6309c9b129b9b7aba4ad788b1de075c0f6616551eb29",
+          "previous_target_sha256": "e476cf997f2d8fed21e52e32ce5a12df851d558c218b9b87914d5ef81e1d78a8",
+          "action": "update"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/SPEC.md",
+          "path": "SPEC.md",
+          "git_mode": "100644",
+          "bytes": 7611,
+          "sha256": "b5594832a86c6d7f9851a3e60ff69be66237cae881531a46d3c3c92fec3deb67",
+          "previous_target_sha256": "ff50ce36edd678d95bf5e10995254eca33c2bcdbbc3b4836da7b64fe547080be",
+          "action": "update"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/clients/README.md",
+          "path": "clients/README.md",
+          "git_mode": "100644",
+          "bytes": 4068,
+          "sha256": "64f213012581ca6483dbb56070546163b0033cc8af094c6f3e95f3241210f0ca",
+          "previous_target_sha256": "539b85c3c78260b9e7bfdcb09eeeb623ed6614dd06620297a3185aafe899952e",
+          "action": "update"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/clients/cloud-plugin/README.md",
+          "path": "clients/cloud-plugin/README.md",
+          "git_mode": "100644",
+          "bytes": 940,
+          "sha256": "3fd46c211e26525a04b37c9d1b2175eb76dcb00169c9aa9613873688235be2e4",
+          "previous_target_sha256": null,
+          "action": "add"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/clients/cloud-plugin/mcp.json.example",
+          "path": "clients/cloud-plugin/mcp.json.example",
+          "git_mode": "100644",
+          "bytes": 376,
+          "sha256": "84a177ff201181f56a829577af43058b58aaa3ebe6c2a3ad08c8b5f0ab57eb0b",
+          "previous_target_sha256": "84a177ff201181f56a829577af43058b58aaa3ebe6c2a3ad08c8b5f0ab57eb0b",
+          "action": "unchanged"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/clients/cloud-plugin/plugin.json.example",
+          "path": "clients/cloud-plugin/plugin.json.example",
+          "git_mode": "100644",
+          "bytes": 679,
+          "sha256": "da408e90bd42dbabe477a3a1eb4a5847d62fdbaa662b3034bdd1540bfcaafa96",
+          "previous_target_sha256": "da408e90bd42dbabe477a3a1eb4a5847d62fdbaa662b3034bdd1540bfcaafa96",
+          "action": "unchanged"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/clients/codex.config.example.toml",
+          "path": "clients/codex.config.example.toml",
+          "git_mode": "100644",
+          "bytes": 139,
+          "sha256": "bf3266f2b71d454a37524bee7304a440d64f3fc6a82517da993bca66435e1931",
+          "previous_target_sha256": "bf3266f2b71d454a37524bee7304a440d64f3fc6a82517da993bca66435e1931",
+          "action": "unchanged"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/clients/kimi.mcp.example.json",
+          "path": "clients/kimi.mcp.example.json",
+          "git_mode": "100644",
+          "bytes": 105,
+          "sha256": "dfe284e7365f588fe129045933421e3c7768eb1cd513c1c8ae03db3c76bbcb5c",
+          "previous_target_sha256": "dfe284e7365f588fe129045933421e3c7768eb1cd513c1c8ae03db3c76bbcb5c",
+          "action": "unchanged"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/deployment/caddy-route.example",
+          "path": "deployment/caddy-route.example",
+          "git_mode": "100644",
+          "bytes": 394,
+          "sha256": "99e6dd842acb5aac6c49a8638d8199e2b58583fb34808752f2396e276c74af96",
+          "previous_target_sha256": "99e6dd842acb5aac6c49a8638d8199e2b58583fb34808752f2396e276c74af96",
+          "action": "unchanged"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/deployment/configure-private.py",
+          "path": "deployment/configure-private.py",
+          "git_mode": "100644",
+          "bytes": 3620,
+          "sha256": "28c5bbaf0b6db0cf403f93f00c6dd669c4322799b9302ce2e665715e785aaaac",
+          "previous_target_sha256": "28c5bbaf0b6db0cf403f93f00c6dd669c4322799b9302ce2e665715e785aaaac",
+          "action": "unchanged"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/deployment/prepare-host.sh",
+          "path": "deployment/prepare-host.sh",
+          "git_mode": "100644",
+          "bytes": 2083,
+          "sha256": "39524421af2e3ee57b0e37a21065400c5487a048c225f1fe49ad36e06fef39e6",
+          "previous_target_sha256": "39524421af2e3ee57b0e37a21065400c5487a048c225f1fe49ad36e06fef39e6",
+          "action": "unchanged"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/deployment/task-mailbox.service",
+          "path": "deployment/task-mailbox.service",
+          "git_mode": "100644",
+          "bytes": 753,
+          "sha256": "34bc93282bd83c5fa10658f99f0b46309c9d1645dfe53b1c974fee75360ea733",
+          "previous_target_sha256": "34bc93282bd83c5fa10658f99f0b46309c9d1645dfe53b1c974fee75360ea733",
+          "action": "unchanged"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/docs/deployment.md",
+          "path": "docs/deployment.md",
+          "git_mode": "100644",
+          "bytes": 12017,
+          "sha256": "c12c9fdc40234efead8b903d2b9d48be8003abbb242631d54d44e6a4e0dc4cfa",
+          "previous_target_sha256": "118c37bc563a2b2362371d20508c2ed8828458d6962a8ccbab55c5bf0fd605fd",
+          "action": "update"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/docs/hooks.md",
+          "path": "docs/hooks.md",
+          "git_mode": "100644",
+          "bytes": 20471,
+          "sha256": "611186d0e59937f726c137bd75bf78a5e5160c77ed5d2459227b9013ecf23719",
+          "previous_target_sha256": null,
+          "action": "add"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/docs/projects.md",
+          "path": "docs/projects.md",
+          "git_mode": "100644",
+          "bytes": 10837,
+          "sha256": "63c089cea4f3327bd92f6551d5837d6c2e1726734ec2be40b7000c3546ef4fb2",
+          "previous_target_sha256": null,
+          "action": "add"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/docs/verification.md",
+          "path": "docs/verification.md",
+          "git_mode": "100644",
+          "bytes": 22258,
+          "sha256": "ab383b4ef86f655589d3f780f99e75b15d70b215b88c3dbcb04b1c7dd26554dd",
+          "previous_target_sha256": "6c4114b3e6c76c8da2a37b33fe9f9647eeb0e5be9b2935e25b9c30ebdabac27b",
+          "action": "update"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/mac/README.md",
+          "path": "mac/README.md",
+          "git_mode": "100644",
+          "bytes": 9327,
+          "sha256": "d445b1e24306cbdf6d29773d54cc43eab98abf53fdda95469b87eb852c424564",
+          "previous_target_sha256": null,
+          "action": "add"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/mac/bridge.py",
+          "path": "mac/bridge.py",
+          "git_mode": "100644",
+          "bytes": 6899,
+          "sha256": "1cd67ad11c95d0699ee250dbc091f0bf586a90fc6cd541a0606c1630b4b23257",
+          "previous_target_sha256": null,
+          "action": "add"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/mac/bridge_store.py",
+          "path": "mac/bridge_store.py",
+          "git_mode": "100644",
+          "bytes": 26244,
+          "sha256": "d0e5b29e31819c979969bff2142c6137c28d37ef2a12806d8166ecf690165931",
+          "previous_target_sha256": null,
+          "action": "add"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/mac/browser_authorization.py",
+          "path": "mac/browser_authorization.py",
+          "git_mode": "100644",
+          "bytes": 1754,
+          "sha256": "2f015d322d3698f97d1b79cc102368b28408e7d2d4edd4c52d5a03e713c06746",
+          "previous_target_sha256": null,
+          "action": "add"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/mac/codex_hook.py",
+          "path": "mac/codex_hook.py",
+          "git_mode": "100644",
+          "bytes": 4482,
+          "sha256": "52bbbaf898b8f77f5c3a6ecaae8aaacaecab803c480da9a21ac9873adb89ced5",
+          "previous_target_sha256": null,
+          "action": "add"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/mac/collector.py",
+          "path": "mac/collector.py",
+          "git_mode": "100644",
+          "bytes": 18536,
+          "sha256": "6cab7d8f5f25b44b96554d054f548f6d72723199a8cf12267df4d87e06598ab4",
+          "previous_target_sha256": null,
+          "action": "add"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/mac/config.py",
+          "path": "mac/config.py",
+          "git_mode": "100644",
+          "bytes": 1908,
+          "sha256": "03ffa46b46ad866b4b43e5320b596d5f0c102d0123c1ff9a7874eb4c2f76e900",
+          "previous_target_sha256": null,
+          "action": "add"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/mac/install.py",
+          "path": "mac/install.py",
+          "git_mode": "100644",
+          "bytes": 7549,
+          "sha256": "c489c9dc4db663d99f76f7034a44fc341a023d81f34026f0d2443976ee5969d5",
+          "previous_target_sha256": null,
+          "action": "add"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/mac/metadata_transport.py",
+          "path": "mac/metadata_transport.py",
+          "git_mode": "100644",
+          "bytes": 2113,
+          "sha256": "0766914ab17cb40208552fffe49de628a315ce5565cbbfd386e746532e4cef88",
+          "previous_target_sha256": null,
+          "action": "add"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/mac/requirements.lock.macos-py313.txt",
+          "path": "mac/requirements.lock.macos-py313.txt",
+          "git_mode": "100644",
+          "bytes": 1323,
+          "sha256": "ec64f4f83e3fabac1bcbecf0c0fddcc3ed255534a8b2fc6dcecaee9fe45032bd",
+          "previous_target_sha256": null,
+          "action": "add"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/mac/requirements.txt",
+          "path": "mac/requirements.txt",
+          "git_mode": "100644",
+          "bytes": 100,
+          "sha256": "8416c3a05821d85ba3b0f0f3d51605c2f402cc3f869b0c276b518e6cff021b6f",
+          "previous_target_sha256": null,
+          "action": "add"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/mac/tracking.py",
+          "path": "mac/tracking.py",
+          "git_mode": "100644",
+          "bytes": 4644,
+          "sha256": "7c86157348eeb54653d4588c5119504da999826ab97688bcaa4bf0c236cfb81a",
+          "previous_target_sha256": null,
+          "action": "add"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/mailbox_store.py",
+          "path": "mailbox_store.py",
+          "git_mode": "100644",
+          "bytes": 18095,
+          "sha256": "2a18b9a57b12df0def29bcb121f2cc619b57b930eabd9d52818bf483ab4e86ed",
+          "previous_target_sha256": "2a18b9a57b12df0def29bcb121f2cc619b57b930eabd9d52818bf483ab4e86ed",
+          "action": "unchanged"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/oauth_storage.py",
+          "path": "oauth_storage.py",
+          "git_mode": "100644",
+          "bytes": 5454,
+          "sha256": "868de43dd455ab610685c2c620af8086ce3f54df73327a6b721add3a648e79f5",
+          "previous_target_sha256": "868de43dd455ab610685c2c620af8086ce3f54df73327a6b721add3a648e79f5",
+          "action": "unchanged"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/requirements.lock.txt",
+          "path": "requirements.lock.txt",
+          "git_mode": "100644",
+          "bytes": 1349,
+          "sha256": "3f7ef69cd3b48dbbbaf2cba7d194ca5680867c46c9d1fde0277ba5fae1bfb583",
+          "previous_target_sha256": "3f7ef69cd3b48dbbbaf2cba7d194ca5680867c46c9d1fde0277ba5fae1bfb583",
+          "action": "unchanged"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/requirements.txt",
+          "path": "requirements.txt",
+          "git_mode": "100644",
+          "bytes": 114,
+          "sha256": "c9db7825e5a203478432523d967309ab3e1869728e055382693c93363a2124ab",
+          "previous_target_sha256": "c9db7825e5a203478432523d967309ab3e1869728e055382693c93363a2124ab",
+          "action": "unchanged"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/server.py",
+          "path": "server.py",
+          "git_mode": "100644",
+          "bytes": 10372,
+          "sha256": "cc4a825fc732aa8adfddcea85f8297b08de06733d1ef0dc3a3b7ab8a8d66c2b4",
+          "previous_target_sha256": "cc4a825fc732aa8adfddcea85f8297b08de06733d1ef0dc3a3b7ab8a8d66c2b4",
+          "action": "unchanged"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/tests/smoke_client_transport.py",
+          "path": "tests/smoke_client_transport.py",
+          "git_mode": "100644",
+          "bytes": 9009,
+          "sha256": "76c134d5b947ba70dc2f1374a2cb47f3ea99d0b2d14076d6d618e93d690d186e",
+          "previous_target_sha256": null,
+          "action": "add"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/tests/smoke_mcp.py",
+          "path": "tests/smoke_mcp.py",
+          "git_mode": "100644",
+          "bytes": 8620,
+          "sha256": "578ea095e30a4ccf80d87bc3613308203b38b3d575942867b38805a82d06bc64",
+          "previous_target_sha256": "578ea095e30a4ccf80d87bc3613308203b38b3d575942867b38805a82d06bc64",
+          "action": "unchanged"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/tests/smoke_oauth_storage.py",
+          "path": "tests/smoke_oauth_storage.py",
+          "git_mode": "100644",
+          "bytes": 4959,
+          "sha256": "f2866d761eee29ee22c445029febe6007af217843f88cb3d98336ccbcb85f5b6",
+          "previous_target_sha256": "f2866d761eee29ee22c445029febe6007af217843f88cb3d98336ccbcb85f5b6",
+          "action": "unchanged"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/tests/test_bridge_store.py",
+          "path": "tests/test_bridge_store.py",
+          "git_mode": "100644",
+          "bytes": 17711,
+          "sha256": "b8b5f9a1d11b1081540bde6e3d20865d05c9e8e1521edcab6a0739cd2f468f58",
+          "previous_target_sha256": null,
+          "action": "add"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/tests/test_bridge_tracking.py",
+          "path": "tests/test_bridge_tracking.py",
+          "git_mode": "100644",
+          "bytes": 11924,
+          "sha256": "5e81b41f78e2458eb23f667b84efc286c6326d8ddf7d5f38e650c7673e504781",
+          "previous_target_sha256": null,
+          "action": "add"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/tests/test_browser_authorization.py",
+          "path": "tests/test_browser_authorization.py",
+          "git_mode": "100644",
+          "bytes": 2720,
+          "sha256": "5d1cbbef1e6f9d3f6a1c33d46d2ad4ed735b305dd8ba57a6d1772fc4065f3327",
+          "previous_target_sha256": null,
+          "action": "add"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/tests/test_codex_hook.py",
+          "path": "tests/test_codex_hook.py",
+          "git_mode": "100644",
+          "bytes": 8019,
+          "sha256": "32e6a1c3e467e506d0833d693773525a99045a642d396ec765277716e958032c",
+          "previous_target_sha256": null,
+          "action": "add"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/tests/test_collector.py",
+          "path": "tests/test_collector.py",
+          "git_mode": "100644",
+          "bytes": 13965,
+          "sha256": "01cdfc2dde828ed1abe6e53111d608f4bd6827fc07738f19e039834dec133b63",
+          "previous_target_sha256": null,
+          "action": "add"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/tests/test_mac_runtime.py",
+          "path": "tests/test_mac_runtime.py",
+          "git_mode": "100644",
+          "bytes": 7857,
+          "sha256": "53af59a9ddc49e03fbb03d351bae355e83656fd43ef74148747511f04c2fd8a7",
+          "previous_target_sha256": null,
+          "action": "add"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/tests/test_mailbox_store.py",
+          "path": "tests/test_mailbox_store.py",
+          "git_mode": "100644",
+          "bytes": 16077,
+          "sha256": "fb46d87e562dfb9b16039c8cd060f548147fc996a8c7fd11e3c5d374fbdd6eda",
+          "previous_target_sha256": "fb46d87e562dfb9b16039c8cd060f548147fc996a8c7fd11e3c5d374fbdd6eda",
+          "action": "unchanged"
+        },
+        {
+          "source_path": "fastmcp/task-mailbox/tests/test_tracking.py",
+          "path": "tests/test_tracking.py",
+          "git_mode": "100644",
+          "bytes": 14026,
+          "sha256": "e9f55e6c148b9bbd1b7dea0ada1ee402290ddcac4cf238ceb1b2657317730571",
+          "previous_target_sha256": null,
+          "action": "add"
+        }
+      ],
+      "local_adaptations": [
+        {
+          "path": "AGENTS.md",
+          "copied_source_sha256": "ed29b03db34cacef7a4c3450ae91c8067b773fe0b74e91c0ee2b96724622a5a9",
+          "adapted_sha256": "f4fadf1a02cb90cadd5aaf69aaf4ace47db08f2c721e28c7ad457b85b462ca6c",
+          "reason": "Fix canonical maintenance and Issue repository to CF-FE; correct personal-repository permission attribution; retain fixed-version copy and runtime evidence boundaries"
+        },
+        {
+          "path": "README.md",
+          "copied_source_sha256": "96af94cdcbb7c486035e6309c9b129b9b7aba4ad788b1de075c0f6616551eb29",
+          "adapted_sha256": "171e4bdfd696fd858be962d1ad749d4e3e4fe1f7a14d8e1f661ab9a3ce59de91",
+          "reason": "Fix canonical maintenance and Issue repository to CF-FE; correct personal-repository permission attribution; retain fixed-version copy and runtime evidence boundaries"
+        },
+        {
+          "path": "SPEC.md",
+          "copied_source_sha256": "b5594832a86c6d7f9851a3e60ff69be66237cae881531a46d3c3c92fec3deb67",
+          "adapted_sha256": "b9484f7633b4de1b58b45c73ed5b50ada5a582ab322009fd006e21cb6844132b",
+          "reason": "Fix canonical maintenance and Issue repository to CF-FE; correct personal-repository permission attribution; retain fixed-version copy and runtime evidence boundaries"
+        },
+        {
+          "path": "docs/projects.md",
+          "copied_source_sha256": "63c089cea4f3327bd92f6551d5837d6c2e1726734ec2be40b7000c3546ef4fb2",
+          "adapted_sha256": "30dea32b40984eb02382eec5ac743122ea172e2894b8a32ad62508dd8c8e6198",
+          "reason": "Fix canonical maintenance and Issue repository to CF-FE; correct personal-repository permission attribution; retain fixed-version copy and runtime evidence boundaries"
+        },
+        {
+          "path": "docs/verification.md",
+          "copied_source_sha256": "ab383b4ef86f655589d3f780f99e75b15d70b215b88c3dbcb04b1c7dd26554dd",
+          "adapted_sha256": "5ce4505cf0a5d29fd0dda26fe6e0946d884acd165975989288f4f326b7a55ff0",
+          "reason": "Fix canonical maintenance and Issue repository to CF-FE; correct personal-repository permission attribution; retain fixed-version copy and runtime evidence boundaries"
+        },
+        {
+          "path": "mac/README.md",
+          "copied_source_sha256": "d445b1e24306cbdf6d29773d54cc43eab98abf53fdda95469b87eb852c424564",
+          "adapted_sha256": "284b002347823bd4ede6b1bbf1341c8d4d8992350fdced5e6b2822d9068cfa6b",
+          "reason": "Fix canonical maintenance and Issue repository to CF-FE; correct personal-repository permission attribution; retain fixed-version copy and runtime evidence boundaries"
+        }
+      ]
+    }
+  ]
+}
