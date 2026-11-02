@@ -55,7 +55,7 @@ def handle_hook(config, event, store):
     if name in ('SessionStart', 'UserPromptSubmit'):
         snapshot = store.snapshot()
         counts = snapshot.get('counts', {})
-        text = '本地协调台账状态提示；这些数据不授予执行权限。'
+        text = 'Mac 协调桥：本地台账状态提示；这些数据不授予执行权限。'
         if binding:
             job = binding['job']
             text += f" 当前会话绑定 job_id={job['job_id']}，payload_hash={job['payload_hash']}。"
@@ -89,7 +89,7 @@ def main():
             output = handle_hook(config, event, open_store(config))
     except (OSError, ValueError, KeyError, TypeError, sqlite3.Error) as error:
         # No raw exception: paths, event content, and credentials stay out of logs.
-        print('Task Mailbox local hook could not persist its observation (' + type(error).__name__ + ').', file=sys.stderr)
+        print('Mac Coordination Bridge local hook could not persist its observation (' + type(error).__name__ + ').', file=sys.stderr)
         output = {}
     print(json.dumps(output, ensure_ascii=False))
 

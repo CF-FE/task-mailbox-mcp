@@ -1,4 +1,4 @@
-"""Mac coordination bridge CLI. No business executor or arbitrary command handler."""
+"""Mac Coordination Bridge CLI. No business executor or arbitrary command handler."""
 
 import argparse
 import asyncio

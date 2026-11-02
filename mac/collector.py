@@ -378,7 +378,7 @@ async def create_client(endpoint, state_directory, *, allow_login=False):
                         raise AuthFailed("AUTH_REJECTED")
 
     oauth = BridgeOAuth(mcp_url=endpoint, token_storage=storage,
-                        client_name="Task Mailbox Mac Bridge", callback_host="127.0.0.1")
+                        client_name="Mac Coordination Bridge", callback_host="127.0.0.1")
     transport = StreamableHttpTransport(endpoint, auth=oauth,
         httpx_client_factory=metadata_client_factory(endpoint))
     return Client(transport, timeout=10, init_timeout=300 if allow_login else 10)

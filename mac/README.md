@@ -1,6 +1,10 @@
-# Mac 项目协调桥
+# Mac 协调桥（Mac Coordination Bridge）
 
 本目录实现 [事件与钩子方案](../docs/hooks.md) 的本地收件、会话感知和结果补传。VPS 九项工具契约不变；本桥不调用模型、Herdr、任意 shell 或任务携带的回调 URL。
+
+本地组件统一称为 **Mac 协调桥（Mac Coordination Bridge）**，远端信箱及 MCP 插件称为 **Task Mailbox**。本次只更改组件称谓与程序提示。既有安装目录 `TaskMailbox`、launchd 标识 `io.taskmailbox.coordinator`、已信任钩子标签 `Task Mailbox local coordination` 保留为兼容安装标识；它们均指本地桥，不是云端插件。钩子定义无需因改名重新生成或信任。
+
+既有 OAuth 注册的客户端名称仍可能显示历史名称 `Task Mailbox Mac Bridge`；当前授权沿原专用缓存使用，新的注册使用 `Mac Coordination Bridge`。不为修改显示名重建注册或重新授权。
 
 ## 可用能力
 

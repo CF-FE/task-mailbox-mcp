@@ -15,7 +15,7 @@ def open_browser_authorization(endpoint, authorization_url):
     # headless preflight, and never log its code challenge or state.
     if not webbrowser.open(authorization_url):
         raise OSError('BROWSER_OPEN_FAILED')
-    print('Task Mailbox Mac Bridge: complete authorization in the opened browser.', flush=True)
+    print('Mac Coordination Bridge: complete authorization in the opened browser.', flush=True)
 
 
 class SafeClientLog(logging.Filter):
