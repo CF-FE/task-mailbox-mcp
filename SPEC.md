@@ -67,3 +67,16 @@ ARCHITECTURE TRIAGE
 - Verification: 引用结构、不可变身份、绑定／暂存／Stop／outbox 连贯性与旧数据路径测试，以及真实条目引用的纯数据收件／回报。
 
 详细字段、Issue／Project draft 两类来源、沿用各项目 Iteration 和派发前核读见[关联契约](docs/projects.md)。引用中的 UNVERIFIED 状态不代替 GitHub 读回；读确认不自动完成或关闭任务。
+
+## Mac 本地 HELD 诊断接口
+
+ARCHITECTURE TRIAGE
+- Path: BOUNDARY_NOTE
+- Evidence: `mac/bridge_store.py` 已拥有 inbox 的 HELD 状态与原因；当前 CLI 仅有计数。既有 `BridgeStore` 构造会初始化数据库，因此诊断入口必须绕过构造写入。
+- Boundary impact: 本地模块新增 `read_held_events(path, source_id, consumer_id="mac-coordinator", *, cursor=0, limit=25)` 和 CLI `held --cursor N --limit N`，使用 SQLite `mode=ro`；不新增 MCP 工具或数据库字段。
+- Preserved: 台账所有权、身份、全局收件游标、HELD 配额占用、原 event/job、结果和状态不变；无网络、OAuth、释放、重派或删除操作。
+- Verification: 交错状态分页／重复查询、空页、边界拒绝、全表及文件摘要不变、无正文泄漏、实际临时 CLI 无 OAuth 收件环境运行。
+
+`cursor` 为本次诊断的排他下界，整数范围 0 到 2^63-1；`limit` 为 1 到 100 的整数，默认 25，两者均拒绝布尔值。结果为 `{events, next_cursor, has_more}`；按原 inbox cursor 升序，仅列 HELD，每页不超过 limit，空页保留输入 cursor。返回字段仅为 cursor、event_id、job_id、event_type、bridge_state、reason 和 created_at；后者只返回含时区的可解析 ISO 时间，否则为 null，不回显无约束时间字符串。原因沿原安全原因码；任务／结果正文、data、路由和凭据均不返回。
+
+查询核对数据库中的 source_id／consumer_id；数据库缺失或身份不符即拒绝，不创建目录或初始化新台账。`next_cursor` 只供下一次诊断分页，绝不写回收件 cursor。并发状态变化下分页不是快照：较早 PENDING 后转为 HELD 时，应从 0 重新检查；不能将继续分页当作完整历史通知或自动承接证据。

@@ -12,6 +12,7 @@ import sys
 import tempfile
 
 from config import DEFAULT_CONFIG, in_scope, load_config, open_store
+from bridge_store import read_held_events
 from codex_hook import draft_lock, draft_path
 from tracking import attach_tracking
 
@@ -64,6 +65,9 @@ def main():
     sub = parser.add_subparsers(dest='command', required=True)
     for name in ('status', 'login', 'once', 'run'):
         sub.add_parser(name)
+    held = sub.add_parser('held', help='read bounded HELD event metadata without network or state changes')
+    held.add_argument('--cursor', type=int, default=0)
+    held.add_argument('--limit', type=int, default=25)
     bind = sub.add_parser('bind')
     bind.add_argument('--session-id', required=True)
     bind.add_argument('--job-id', required=True)
@@ -77,10 +81,19 @@ def main():
     args = parser.parse_args()
     os.umask(0o077)
     config = load_config(args.config)
+    if args.command == 'held':
+        try:
+            output = read_held_events(Path(config['state_dir']) / 'bridge.sqlite3',
+                config['source_id'], config['consumer_id'], cursor=args.cursor, limit=args.limit)
+        except ValueError as error:
+            parser.error(str(error))
+        print(json.dumps(output, ensure_ascii=False, indent=2, allow_nan=False))
+        return 0
     store = open_store(config)
     if args.command == 'status':
         output = store.snapshot()
         output['execution_enabled'] = False
+        output['held_query'] = {'command': 'held', 'cursor': 0, 'limit': 25}
         output['session_evidence'] = 'Last observed lifecycle signals; missing or old signals do not prove a process stopped.'
     elif args.command == 'bind':
         if not in_scope(config, args.cwd):

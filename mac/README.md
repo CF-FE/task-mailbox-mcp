@@ -46,6 +46,7 @@ python3 mac/install.py \
 ```bash
 ../.venv/bin/python bridge.py login
 ../.venv/bin/python bridge.py status
+../.venv/bin/python bridge.py held --cursor 0 --limit 25
 ../.venv/bin/python bridge.py once
 ../.venv/bin/python bridge.py run
 ```
@@ -68,6 +69,12 @@ launchctl print "gui/$(id -u)/io.maccoordinationbridge.coordinator"
 `RunAtLoad=true` 使单元加载及以后登录时启动；进程中的 collector 保持轮询，网络错误按原预算退避。`KeepAlive=false` 让认证或协议错误停止后保持停止，修好后用 `launchctl kickstart "gui/$(id -u)/io.maccoordinationbridge.coordinator"` 显式恢复；本轮不增加崩溃自恢复策略。停止并卸载用 `launchctl bootout "gui/$(id -u)/io.maccoordinationbridge.coordinator"`。不要在 launchd 已收件时同时运行 `once`／`login`，先停止原网络写者；独立本地钩子照常记录。
 
 本机已启用登录自启并回读后台 PID 与更新的成功收件时点，具体版本及覆盖见验证记录。单元没有打开 Mac 公网端口。Mac 睡眠时不能保证持续感知，恢复后沿原游标补读。
+
+## 定位 HELD 事件
+
+`held --cursor 0 --limit 25` 只读本地台账，按原 inbox cursor 升序返回 HELD 的原 event/job、类型、安全原因和可解析的创建时间；不包含任务正文、data 或凭据，不需要 OAuth 或网络。使用返回的 `next_cursor` 继续分页，`has_more=false` 表示当前尾页；空页保留输入游标。limit 范围 1–100；诊断游标不写回收件 cursor，不改变 HELD、配额或补传队列。不存在的台账不会被创建，身份不符则拒绝。
+
+`status` 给出 `held_query` 入口。并发时较早 PENDING 可能稍后才变 HELD，需要从 0 重新检查；分页不是完整历史通知。接口、时间脱敏及无写入边界见[本地诊断契约](../SPEC.md#mac-本地-held-诊断接口)。
 
 ## 从旧安装目录迁移
 

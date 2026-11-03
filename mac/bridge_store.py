@@ -1,6 +1,6 @@
 """Private local coordination ledger. It never calls a network or executor."""
 
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -66,6 +66,41 @@ def _cwd(value):
     if not isinstance(value, str) or not value or "\0" in value or not os.path.isabs(value):
         raise ValueError("cwd must be an explicit absolute path")
     return os.path.normpath(value)
+
+
+def read_held_events(path, source_id, consumer_id="mac-coordinator", *, cursor=0, limit=25):
+    """Read bounded HELD metadata without initializing or mutating a ledger."""
+    _id(source_id, "source_id")
+    _id(consumer_id, "consumer_id")
+    _number(cursor, "cursor")
+    _number(limit, "limit", 1, 100)
+    path = Path(path).expanduser()
+    if path.is_symlink():
+        raise ValueError("ledger must not be a symlink")
+    with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=1)) as connection:
+        connection.row_factory = sqlite3.Row
+        connection.execute("BEGIN")
+        identity = dict(connection.execute("SELECT key,value FROM meta WHERE key IN ('source_id','consumer_id')"))
+        if identity != {"source_id": source_id, "consumer_id": consumer_id}:
+            raise ValueError("ledger source and consumer identities do not match")
+        rows = connection.execute(
+            "SELECT cursor,event_id,body,reason FROM inbox WHERE state='HELD' AND cursor>? ORDER BY cursor LIMIT ?",
+            (cursor, limit + 1)).fetchall()
+        events = []
+        for row in rows[:limit]:
+            event = json.loads(row["body"])
+            # Ingested creation-time strings are not constrained to timestamps.
+            # Expose a timestamp or null, never that unconstrained source value.
+            try:
+                created = datetime.fromisoformat(event["created_at"].replace("Z", "+00:00"))
+                created_at = created.isoformat() if created.tzinfo is not None else None
+            except ValueError:
+                created_at = None
+            events.append({"cursor": row["cursor"], "event_id": row["event_id"],
+                "job_id": event["job_id"], "event_type": event["event_type"],
+                "bridge_state": "HELD", "reason": row["reason"], "created_at": created_at})
+        return {"events": events, "next_cursor": events[-1]["cursor"] if events else cursor,
+                "has_more": len(rows) > limit}
 
 
 class BridgeStore:
