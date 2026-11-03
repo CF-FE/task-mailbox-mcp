@@ -295,3 +295,5 @@ Herdr 后续限定试点已由其实施主线程完成一次真实执行／产�
 ## 可选 MCP Events 开发交付（2026-11-03）
 
 服务侧新增默认关闭的精确任务结果事件。181项标准库回归、14项加密生命周期、两协议真实SDK回环、实际服务lifespan自动投递的隔离HTTP读/ACK样本，以及原MCP/OAuth smoke均通过。原生Dot订阅、平台公网回调、VPS部署和长稳仍为NOT_RUN；本轮未改原collector、认证、端点或启用公网出站。合同、固定部署集合与撤回步骤统一见[events.md](events.md)，任务沿[#2](https://github.com/CF-FE/task-mailbox-mcp/issues/2)。直接业务联络与原Dot最终验收沿Herdr原任务取证，不互相代证。
+
+固定源码 [`c95510f`](https://github.com/CF-FE/task-mailbox-mcp/commit/c95510fddbe42f7ebe61ac57f283a0b56ef1dee5)已发布到 `codex/mcp-result-events`，远端分支摘要回读一致。独立复核该固定对象：满额待发队列仍能补传、退订不被晚验证复活及验证后撤权均通过；另实际回环核实默认关闭时不声明事件、不建事件表、原工具正常、回调次数为零。此为服务开发限定验收，任务#2仍Open／总览In Progress，未合入main、未部署或启用回调。
