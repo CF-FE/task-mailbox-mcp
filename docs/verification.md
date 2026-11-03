@@ -4,11 +4,11 @@
 
 ## 当前状态
 
-更新：2026-11-02，Asia/Shanghai。本服务代码、文档、配置、Skill、插件和 Issue 的唯一维护仓固定为 `CF-FE/task-mailbox-mcp`，初始基线 `7d162860c10ac2d72719522be7fe01478f4747a3` 保留。其他项目依其原 CF-FE 仓库／Project 任务合同维护；本地目录及部署整合来源不能据以改投个人仓，也不把其他业务统一归入本服务仓。
+最近更新于 2026-11-03（Asia/Shanghai）。本服务代码、文档、配置、Skill、插件和 Issue 的唯一维护仓固定为 `CF-FE/task-mailbox-mcp`，初始基线 `7d162860c10ac2d72719522be7fe01478f4747a3` 保留。其他项目依其原 CF-FE 仓库／Project 任务合同维护；本地目录及部署整合来源不能据以改投个人仓，也不把其他业务统一归入本服务仓。
 
 本轮从个人整合仓固定来源 `9d36feb436264f2c0a065be7e644043a930a98dd` 接回 47 个服务文件，排除个人整合记录 `INTEGRATION.md`／`import-manifest.json`；复制时来源 hash 一致，逐文件基线见 [source-updates.json](source-updates.json)。本页随后进行归属与权限更正，来源记录保留复制时字节。本次接收已提交为 `652406bf09ed589285942293129215d35363a19e`，组织规则增量为 `3add47a`，均已推送本仓；个人整合仓只保留历史部署副本。
 
-当前 Mac 实际安装固定为本仓 `87cfb6551240c08d5aa8df3a8afdc305c5388a86`，11 个运行文件摘要回读一致；登录自启、原生 launchd running 和新的 collector=OK 成功时点已回读。观察范围仍为 Herdr／信箱两个项目，信箱路径已切到本 CF-FE 工作区，原数据验证临时绑定已归档解除，原 job／hash／事件／结果与专用 OAuth 身份保留，迁移中的路径元数据适配见下文。VPS 运行代码快照仍为原部署 `a06dc70e7994df7cb3c92a30cfde4276c26a5759`，本轮未重启或替换 VPS 服务。旧 Mac `6386d7f` 及来源 `9d36feb` 作为历史快照保留，不冒称当前来源；除特别标明，现场证据由主执行侧直接取得。
+当前 Mac 安装为 `b6dc6b6dafff08f4ba25ddd999df4e679bb4a802`。本机安装、隔离联测及生产探针的状态见[11 月 3 日现场回执](#2026-11-03-mac-协调员端口现场回执)。前次安装固定为 `87cfb6551240c08d5aa8df3a8afdc305c5388a86`，11 个运行文件摘要回读一致；登录自启、原生 launchd running 和新的 collector=OK 成功时点已回读。观察范围仍为 Herdr／信箱两个项目，信箱路径已切到本 CF-FE 工作区，原数据验证临时绑定已归档解除，原 job／hash／事件／结果与专用 OAuth 身份保留，迁移中的路径元数据适配见下文。VPS 运行代码快照仍为原部署 `a06dc70e7994df7cb3c92a30cfde4276c26a5759`，本轮未重启或替换 VPS 服务。旧 Mac `6386d7f` 及来源 `9d36feb` 作为历史快照保留，不冒称当前来源；除特别标明，现场证据由主执行侧直接取得。
 
 | 层次 | 状态 | 已有证据与范围 |
 | --- | --- | --- |
@@ -278,3 +278,15 @@ Worker／角色库共 22 文件、111,320 字节，仅标准库离线选型／�
 公子另已授权 Herdr 项目协调层确定性执行适配器开发，正式任务归 [Herdr #1](https://github.com/CF-FE/herdr-4-codexcloud/issues/1)，规范及后续执行事实由该仓维护；本 Issue 继续承载传输组件与原关联，VPS 九工具、Mac 桥及 hook 不因此取得执行权。本节的发布／差异复核不是新增适配器、模型回合或业务验收的完成回执。
 
 Herdr 后续限定试点已由其实施主线程完成一次真实执行／产物核验，详见 [Herdr 执行适配器规范](https://github.com/CF-FE/herdr-4-codexcloud/blob/main/docs/herdr-executor.md)；本服务没有新增执行工具或更换运行源码。该结果已用 Lead 自己的真实 Codex session／turn `bind` 和 `stage-report`；真实自然 Stop 于北京时间2026-11-03 10:25:49将其排入原outbox。原collector在既定退避中自行恢复，10:31:52直接回读collector=OK及原report=SENT／v1／同hash；期间没有重启、重新登录、改路由／认证／代理／TLS、第二客户端或业务二发。原review实际读全v1，与2973字节原件逐字段及canonical hash一致，10:34:55写稳定读ACK并再读持久事件；实施主线程直接核本地ACK游标10／HANDLED、待收和待补传0。没有伪造Stop、直接发布或第二collector。主执行侧另直接读到最后成功 2026-11-03T02:12:30Z、02:16:30Z collector=`NETWORK_FAILED / UNKNOWN_CAUSE stage:CLIENT_OPEN type:RuntimeError`；当前原因 UNKNOWN，沿原退避，不据此认定认证失效、重登录或业务失败。原事件已按稳定event／hash完成对账；本Issue因长期稳定性和正式业务范围仍保持Open。此次自然CLIENT_OPEN异常期间的持久缓存和补传已取得一个真实样本，不能代替物理断网／崩溃注入或24小时稳定性。Herdr自身首版工程任务沿其原Issue限定验收，不据此关闭本服务的稳定性待办。
+
+## 2026-11-03 Mac 协调员端口现场回执
+
+现场证据由本轮部署维护方回读并交付。下表将正式 Mac 的安装验收与隔离环境的协议验收分别记录。
+
+| 对象 | 状态 | 回执 |
+| --- | --- | --- |
+| 正式 Mac 原桥升级 | PASS | 既有正式安装目录已升级到 `b6dc6b6dafff08f4ba25ddd999df4e679bb4a802`。原 collector 在维护窗口内停止、启动，北京时间 18:02:23 回读健康 `OK`。13/13 个运行文件的摘要同时匹配固定 Git 对象及安装收据。 |
+| 升级连续性 | PASS | 维护方前后核对原核心台账及 hooks、config、plist 一致。本次沿用原 OAuth 和原状态目录，无迁移。 |
+| 隔离工程联测 | PASS | 固定 Herdr `418b5a2` 与本桥 `b6dc6b6`，使用合成身份及临时数据验证本机 socket 双向签名、原 collector 收发、丢确认后按原事件对账，以及指定结果版本／摘要的读取和 ACK。Herdr 97 项、信箱 147 项回归和 9 项 SDK 冒烟检查通过。 |
+| 正式 Mac 签名探针 | NOT_RUN | 截至本记录，生产探测密钥待公子确认，尚未取得生产 `PORT_VERIFIED` 回执。[探针与轮换步骤](../mac/README.md#协调员本地签名探针) |
+| 云端 Dot 真实联络 | NOT_RUN | 未配置生产业务 grants。本轮真实业务请求、负责人答复均为 0，未取得云端 Dot 对本次请求的原生读取回执。 |
