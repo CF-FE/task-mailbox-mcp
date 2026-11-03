@@ -8,7 +8,7 @@
 
 本轮从个人整合仓固定来源 `9d36feb436264f2c0a065be7e644043a930a98dd` 接回 47 个服务文件，排除个人整合记录 `INTEGRATION.md`／`import-manifest.json`；复制时来源 hash 一致，逐文件基线见 [source-updates.json](source-updates.json)。本页随后进行归属与权限更正，来源记录保留复制时字节。本次接收已提交为 `652406bf09ed589285942293129215d35363a19e`，组织规则增量为 `3add47a`，均已推送本仓；个人整合仓只保留历史部署副本。
 
-当前 Mac 实际安装固定为本仓 `9d556e052e4efd29ad3dafbaf72834b1707c1591`，11 个运行文件摘要回读一致；登录自启、原生 launchd running 和新的 collector=OK 成功时点已回读。观察范围仍为 Herdr／信箱两个项目，信箱路径已切到本 CF-FE 工作区，原数据验证临时绑定已归档解除，原 job／hash／事件／结果与专用 OAuth 身份保留，迁移中的路径元数据适配见下文。VPS 运行代码快照仍为原部署 `a06dc70e7994df7cb3c92a30cfde4276c26a5759`，本轮未重启或替换 VPS 服务。旧 Mac `6386d7f` 及来源 `9d36feb` 作为历史快照保留，不冒称当前来源；除特别标明，现场证据由主执行侧直接取得。
+当前 Mac 实际安装固定为本仓 `87cfb6551240c08d5aa8df3a8afdc305c5388a86`，11 个运行文件摘要回读一致；登录自启、原生 launchd running 和新的 collector=OK 成功时点已回读。观察范围仍为 Herdr／信箱两个项目，信箱路径已切到本 CF-FE 工作区，原数据验证临时绑定已归档解除，原 job／hash／事件／结果与专用 OAuth 身份保留，迁移中的路径元数据适配见下文。VPS 运行代码快照仍为原部署 `a06dc70e7994df7cb3c92a30cfde4276c26a5759`，本轮未重启或替换 VPS 服务。旧 Mac `6386d7f` 及来源 `9d36feb` 作为历史快照保留，不冒称当前来源；除特别标明，现场证据由主执行侧直接取得。
 
 | 层次 | 状态 | 已有证据与范围 |
 | --- | --- | --- |
@@ -30,7 +30,7 @@
 | Mac Kimi OAuth／工具发现 | NOT_RUN | 未启动 Kimi 新会话、登录或发现 |
 | 原 nonce 结果交付与 Dot 读取 | PASS | Mac 桥收件／原事件上传 v1，当前桌面会话经云端 App 读全核摘要／nonce 并 ACK；公子另报告指定 Dot 已读取并确认，主执行侧实际回读该精确 job／版本／hash 的独立稳定 ACK 事件。Dot 行为归用户回报，事件持久记录为主执行侧直接取证；Mac 随后实际收取该 ACK，原游标推进且待处理／回传均为 0 |
 | 双向 nonce 全覆盖 | PARTIAL | 上述原任务链路已通过；原任务由桌面会话经云端 App 提交，不能冒称 Dot 发起。Mac 新建任务、Dot 回报的反方向尚未执行 |
-| Mac 本地实现与本仓复测 | PASS | 本仓完整 106 项测试已由主执行侧在既有独立 Mac 环境复跑通过：原 Store 17、台账 20、collector 17、hook 10、CLI／安装 8、浏览器交接／日志 4、引用校验 21、关联综合 9 |
+| Mac 本地实现与本仓复测 | PASS | 本仓完整 135 项测试已由主执行侧在既有独立 Mac 环境复跑通过：原 Store 17、台账 20、collector 40、hook 10、CLI／安装 8、浏览器交接／日志 4、引用校验 21、关联综合 9、HELD 查询 6 |
 | Mac 桥独立安装 | PASS | 独立源码副本、摘要回读、0700 运行目录、0600 配置／钩子定义、实际 SQLite 状态回读及 plist lint；没有启动模型／Herdr／业务 handler |
 | Mac 桥依赖与加密客户端初始化 | PASS | Python 3.13.1 x86_64，FastMCP 4.0.11、MCP 2.3.0、cryptography 48.0.1，共 66 依赖；临时目录中实际构造客户端、私密权限与缺缓存拒绝测试通过，无外部请求 |
 | Codex App 原生钩子触发（已观察四类） | PASS | 公子已审阅并信任已安装定义；主执行侧直接回读本地 live 台账，session 与本对话对应，观察到 SessionStart／PreToolUse／PostToolUse／UserPromptSubmit。只覆盖实际观察的四类，不推定其余三类或 CLI 模型回合已触发 |
@@ -188,3 +188,62 @@ systemd 模板的 `MemoryHigh=192M`、`MemoryMax=256M`、`CPUQuota=50%`、`Tasks
 - hook 标签为 `Mac Coordination Bridge local coordination`。公子已确认信任，主执行侧以迁移前私密 SQLite 快照为界，直接回读当前会话新增 PreToolUse／PostToolUse；仅记录本次实际已见的事件，未把配置或手动脚本调用当作原生触发。其他原生事件与 CLI 模型 turn 仍分别留待取证。
 
 配置／旧环境／旧源码／旧 plist 及迁移对账摘要保存在新运行目录下的私密 `state/evidence/runtime-path-migration-20261103/`。它们是回退材料，不是另一个活动安装；原台账与 OAuth 只沿新路径继续。公开仓库只保留方法、固定提交和汇总结论，不提交私密配置、凭据、完整路径清单或原始现场输出。
+
+## 全局评审实施与固定版本交接（2026-11-03，Asia/Shanghai）
+
+本节为原任务的统一工程交接；代码／作者自检、独立增量复核、实际运行回读与最终验收分别记录。公子在原 review 会话授权按“归属和状态对齐 → 三缺陷修复 → 运行更新 → 独立验收”推进，本实施会话是本轮相关资产的唯一写入协调者，原 review 会话负责拉取和最终验收。原 Issue／Projects 关联不变，不新建竞争队列。
+
+### 固定版本与维护边界
+
+| 仓库 | 本轮固定版本 | 维护／发布事实 |
+| --- | --- | --- |
+| `CF-FE/task-mailbox-mcp` | HELD 增量 `8fd78b8d1b76a917d9ce91fb0d4257f45b0560d9`；完整修复源码 `87cfb6551240c08d5aa8df3a8afdc305c5388a86` | 已推送本仓；VPS 信箱与 Mac 桥唯一维护位置。本页文档提交由 Git 历史和原 Issue 记录，不与运行源码版本混同 |
+| `CF-FE/herdr-4-codexcloud` | 本地 `1d26558b4b27dc5541122cc885edd76847671da4` | 9 份采用／状态文档对齐；Worker 已在原本地 `f9b1209` 提交。本次独立读取远端 main 为 `2d812e96486579e71443d32f1c46d81a0b5fd749`，本轮未推送，不能将 Worker 或新文档记为已发布 |
+| `CF-FE/mymcp-4-codexcloud` | 本地 `f864c5f17d11f543ead1ef2d9cd366ea87c8828a` | 首页新路线和角色接收导航两文档更新；旧 Lody 任务和写权未宣称全部退出。本轮未推送，已核远端 main 仍为 `02e6ca4` |
+| 个人 `create-network-sh` | 本地 `a45cdc404cabfe2e4f580c681aef2efe928f8e10` | 只改 4 份历史标记／导航；服务源码与 import-manifest 未变、不自动同步。本轮未推送，已核远端 main 仍为 `9d36feb` |
+
+Herdr 的 `README`／`docs/status.md`／`architecture.md`／`pilot.md` 与 5 个相关现行入口已对齐；有日期的早期接入保留原文并显式标历史。Worker 的远端目标文件缺失已实际按远端提交树核对，mymcp 不再引入该未发布文件的 main 直链。各仓只维护自己的权威状态，本节不替代原业务 Project 或 Herdr 采用状态。
+
+### 精确变更文件
+
+以下为追加实施包 T1–T3 的文件集合；各路径均相对所属仓库根，不包含运行缓存或私密证据。
+
+| 仓库 | 文件 |
+| --- | --- |
+| Herdr | `README.md`、`docs/status.md`、`docs/architecture.md`、`docs/pilot.md`、`mcp/README.md`、`docs/agent-communication.md`、`docs/collaboration-iteration-guide.md`、`docs/dot-mac-herdr-evaluation.md`、`docs/vps-control-pilot.md` |
+| mymcp | `README.md`、`docs/lody4dot/workspace-roles/README.md` |
+| 旧整合仓 | `README.md`、`fastmcp/README.md`、`fastmcp/task-mailbox/README.md`、`fastmcp/task-mailbox/INTEGRATION.md` |
+| Task Mailbox | `mac/collector.py`、`mac/bridge_store.py`、`mac/bridge.py`、`tests/test_collector_recovery.py`、`tests/test_collector_recovery_additional.py`、`tests/test_held_query.py`、`SPEC.md`、`README.md`、`mac/README.md`、`docs/verification.md` |
+
+已完成的 T0 迁移另以 `9d556e0` 保留 `mac/config.py`、`mac/install.py`、`tests/test_mac_runtime.py` 及安装说明的路径／新旧 hook 去重适配；其后验证文档基线为 `ca8a480`。T2 不重复迁移、不重建环境或改 hook 定义。
+
+### 三缺陷、行为回归与边界
+
+1. **收件／补传饥饿**：两向共用唯一总 RPC 计数及 deadline，worker 每轮轮换优先方向；RPC 至少 3 时为后方向保留 1 次调用，1–2 RPC 不强分。曾发现固定半轮时间会让合法的两 RPC 结果在连续出件下永久 pending，已用真实 `run_collector` 加 fake client／有界 stop 复现并修正；最终版本不再固定减半时间。已知传输故障可在剩余预算给另一方向机会；未知／本地错误结束当前轮，认证／配置／整体协议失败仍停止分支。报告沿原 event/hash/result；不会重跑业务。关键回归：`test_pending_query_timeout_does_not_starve_saved_report`、`test_upload_timeout_does_not_starve_new_page_and_job`、`test_pending_backlog_leaves_an_upload_opportunity_inside_total_budget`、`test_real_worker_does_not_starve_slow_two_rpc_result_with_continuous_outbox`、`test_two_rpc_worker_eventually_advances_both_directions`。
+2. **安全原因码丢失**：现有 health.detail 记录白名单 `CAUSE stage:STAGE type:TYPE`，时间沿 updated_at；未知明示 UNKNOWN，认证原因优先于外层协议包装，关闭客户端的后续网络错误不能将认证停止降为自动重试。原始异常、URL、token、payload 和未许可类型文字不写入状态；单事件 HELD 原因也只保留已定义安全码。关键回归：`test_safe_auth_cause_and_creation_stage_survive_wrapping`、`test_known_outer_protocol_code_keeps_inner_authentication_stop_cause`、`test_later_context_close_error_does_not_erase_authentication_stop`、`test_untrusted_auth_text_and_exception_type_are_not_persisted`。**2026-11-02 的 AUTH_FAILED/CLIENT_UNAVAILABLE 现场根因仍 UNKNOWN**，测试构造的注册过期不能反推现场。
+3. **HELD 无定位入口**：`read_held_events(...)` 及 `held --cursor N --limit N` 使用只读 URI，核 source／consumer，返回原 cursor/event/job、类型、原因及安全时间。查询不构造新 Store、不创建缺失台账、不改变任何表、收件游标、HELD 配额或队列，不依赖 OAuth 或网络。关键回归：`test_pages_cover_held_only_in_cursor_order_without_bodies_or_writes`、`test_rejected_boundaries_leave_every_table_unchanged`、`test_reopened_ledger_and_readonly_cli_match_without_oauth_or_state_changes`。精确范围及并发分页边界见 [SPEC](../SPEC.md#mac-本地-held-诊断接口)。
+
+上述新回归位于 `tests/test_collector_recovery.py`（16）、`tests/test_collector_recovery_additional.py`（7）及 `tests/test_held_query.py`（6）；原 collector 的 17 项停止／预算／去重回归保留。没有增加数据库 schema、MCP 工具、依赖版本或认证入口。
+
+### 统一检查与独立复核
+
+| 检查 | 结果与证据归属 |
+| --- | --- |
+| Mac 独立解释器 `-B -m unittest discover -s tests -v` | 主执行侧直接 135 PASS，绑定完整修复源码；含真实临时 SQLite 与实际临时 CLI，非模型／业务调用 |
+| 同环境 `-B tests/smoke_client_transport.py` | 主执行侧直接 9 PASS，全部 fake／临时资源、无外网；另对已装 SDK 的 ReadTimeout／RemoteProtocolError／EndOfStream 做无网络识别及安全详情断言通过 |
+| Herdr 三项规定检查 | 主执行侧直接通过 `worker_library.py check`（7 Worker／9 backend／13 role／11 专业候选）、`check_repository.py`（mcp0/skill2/plugin0）、27 项 unittest。后续只有 README／status 采用文字补录，代码树未变 |
+| mymcp | 主执行侧结构检查通过（mcp1/skill4/plugin1）；仅两 Markdown 改动，未重跑无关全套行为。239 PASS／1 Linux skip 限复用原 review 会话在未变代码基线 `02e6ca4` 的结果，不冒充本次重跑 |
+| 文档、来源与增量 | 子执行侧完成三仓 15 Markdown 的引用核对；验收侧独立报告 268 个本地链接／72 锚点通过。主执行侧核源码／清单未跨仓变更，legacy import-manifest 字节保留，最终 diff --check 通过 |
+| 独立模拟与代码增量 | 原 review 主线程直接报告：初始独立 9 项由 5PASS/4FAIL 转为 9PASS；新增生产 worker 路径 2PASS；HELD 9PASS。collector SHA256 `f62f01502d1eeaebeac8e3ee6444381802ef95e525d0637ef8c9ae87a8ee1a85` 以及 HELD 已验文件摘要均与固定修复提交一致，增量代码审查通过；不等同整体业务验收 |
+
+验收侧在 135 项中观察到 2 条既有测试夹具 SQLite ResourceWarning，已定位 `tests/test_bridge_store.py` 的 with-connection 夹具未显式 close；该文件本轮未改。无测试失败，作为已知非阻断警告保留，本轮不扩展修复，也不因警告重复运行全部测试。
+
+### 新目录运行回读与交验状态
+
+源码自检完成后，主执行侧停止原唯一 collector，按固定 `87cfb655` 的 Git 对象更新既有 `MacCoordinationBridge/app`，没有再次迁移或新建环境。11 个运行文件同时匹配安装 receipt 和固定源摘要；配置、hooks.json、plist 摘要不变，不要求重复信任。原 meta/jobs/inbox/reports 与 9 个 OAuth 文件在更新前后及启动后仍一致；历史事件、结果、ACK、密钥和授权保留，hooks／sessions／health 的正常新记录不冻结。
+
+主执行侧直接回读：新 launchd running、collector.lock 只有新进程持有、collector 与 collector_last_success 为 OK，且成功时点晚于此次启动；cursor=7，HELD／待补传为0。安装后的只读 HELD 命令实际返回空尾页，未改变全局游标；更新后的原生 hook 已出现新观察。验收侧另直接报告已核同一 receipt 固定源、11 个文件、只读台账、原生 launchctl 与新成功时点，非仅转述作者结论。
+
+完整机器级凭据与摘要保存在私密 `install-receipt.json` 及 `state/evidence/bridge-reliability-update-20261103/`；其中原文件、配置和旧源码仅作回退材料。公开仓库不包含私密端点／会话ID、令牌、台账正文或原始现场日志。VPS 本轮没有部署或重验，原部署快照仍沿记录 `a06dc70`；Mac 改版不冒称 VPS 换版。
+
+**作者实施／自检与分阶段独立核验已完成；最终统一报告待原 review 会话回读后作最终验收。** 原 Issue 保持 Open。长期稳定性、Mac 发起反向新任务、具体 Cloud／CLI 的独立认证与读写、Herdr／模型业务承接及负责人业务验收仍分别未验；自动执行 handler 与 Dot 自动唤醒未实现。本轮未新增生产 job、模型／Herdr 派发、现场故障注入、自动登录／重注册、TLS／代理／端点变更或新的 CI／调度平台。
