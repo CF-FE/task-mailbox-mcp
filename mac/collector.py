@@ -9,6 +9,7 @@ import math
 import os
 from pathlib import Path
 import stat
+import sqlite3
 import time
 from urllib.parse import urlsplit
 
@@ -63,13 +64,21 @@ def _permission_denied(text):
     return isinstance(text, str) and (text == "AUTHORIZATION_DENIED" or text.startswith("AUTHORIZATION_DENIED:"))
 
 
-def _auth_error(error):
+def _error_chain(error):
     pending, seen = [error], set()
     while pending:
         item = pending.pop()
         if id(item) in seen:
             continue
         seen.add(id(item))
+        yield item
+        pending.extend(child for child in (getattr(item, "__cause__", None),
+                       getattr(item, "__context__", None)) if child is not None)
+        pending.extend(getattr(item, "exceptions", ()))
+
+
+def _auth_error(error):
+    for item in _error_chain(error):
         if isinstance(item, (AuthRequired, AuthFailed)):
             return "AUTH_REQUIRED" if isinstance(item, AuthRequired) else "AUTH_FAILED"
         if _permission_denied(str(item)):
@@ -77,10 +86,74 @@ def _auth_error(error):
         if (getattr(item, "status_code", None) in (401, 403)
                 or getattr(getattr(item, "response", None), "status_code", None) in (401, 403)):
             return "AUTH_FAILED"
-        pending.extend(child for child in (getattr(item, "__cause__", None),
-                       getattr(item, "__context__", None)) if child is not None)
-        pending.extend(getattr(item, "exceptions", ()))
     return None
+
+
+AUTH_FAILURE_CAUSES = frozenset({"AUTHORIZATION_DENIED", "CLIENT_REGISTRATION_EXPIRED",
+    "DISCOVERY_METADATA_MISSING", "REFRESH_REJECTED", "INVALID_REFRESH_RESPONSE",
+    "INTERACTIVE_AUTH_DISABLED", "AUTHORIZATION_DESTINATION_REJECTED", "BROWSER_OPEN_FAILED",
+    "AUTH_REJECTED"})
+PROTOCOL_CAUSES = frozenset({"INVALID_JSON", "RECORD_TOO_LARGE", "TOOL_ERROR", "INVALID_TOOL_RESULT",
+    "JOB_IDENTITY_MISMATCH", "JOB_EVENT_HASH_MISMATCH", "CANCEL_NOT_CONFIRMED",
+    "INVALID_RESULT_VERSION", "RESULT_IDENTITY_MISMATCH", "RESULT_EVENT_MISMATCH",
+    "RESULT_EVENT_MISSING", "INVALID_EVENT_PAGE"})
+FAILURE_STAGES = frozenset({"CLIENT_CREATE", "CLIENT_OPEN", "CLIENT_CLOSE", "ROUND", "INBOX",
+    "OUTBOX", "GET_JOB", "GET_RESULT", "LIST_EVENTS", "PUBLISH_RESULT", "REPORT_RECEIPT"})
+ERROR_TYPES = frozenset({"AuthRequired", "AuthFailed", "ProtocolError", "BudgetExhausted",
+    "TimeoutError", "OSError", "ValueError", "RuntimeError", "ExceptionGroup", "BaseExceptionGroup",
+    "ConnectionError", "ConnectionRefusedError", "ConnectionResetError", "ConnectionAbortedError",
+    "PermissionError", "FileNotFoundError", "TypeError", "KeyError", "DatabaseError",
+    "OperationalError", "IntegrityError", "JSONDecodeError", "ReadTimeout", "WriteTimeout",
+    "ConnectTimeout", "PoolTimeout", "ConnectError", "ReadError", "WriteError", "RemoteProtocolError",
+    "LocalProtocolError", "McpError", "ToolError", "ClientError"})
+
+
+TRANSPORT_ERROR_NAMES = frozenset({"TimeoutException", "ConnectTimeout", "ReadTimeout", "WriteTimeout",
+    "PoolTimeout", "NetworkError", "ConnectError", "ReadError", "WriteError", "CloseError", "ProxyError",
+    "RemoteProtocolError", "LocalProtocolError", "EndOfStream", "BrokenResourceError", "ClosedResourceError"})
+
+
+def _is_transport_failure(error):
+    """Only recognized transport failures can yield to the other direction."""
+    chain = list(_error_chain(error))
+    if any(isinstance(item, (sqlite3.Error, TypeError, PermissionError, FileNotFoundError)) for item in chain):
+        return False
+    for item in chain:
+        children = getattr(item, "exceptions", ())
+        if children and not all(_is_transport_failure(child) for child in children):
+            return False
+    return any(isinstance(item, OSError) or (
+        type(item).__module__.split(".", 1)[0] in {"httpx", "httpx2", "httpcore", "httpcore2", "anyio"}
+        and type(item).__name__ in TRANSPORT_ERROR_NAMES) for item in chain)
+
+
+def _failure(error, stage):
+    """Persist only fixed codes; exception messages and external values are data."""
+    state = _auth_error(error)
+    chain = list(_error_chain(error))
+    if state is None:
+        state = "PROTOCOL_FAILED" if any(isinstance(item, (ProtocolError, ValueError))
+                                           for item in chain) else "NETWORK_FAILED"
+    cause = "UNKNOWN_CAUSE"
+    for item in chain:
+        code = item.args[0] if len(item.args) == 1 and isinstance(item.args[0], str) else None
+        if ((state == "AUTH_REQUIRED" and isinstance(item, AuthRequired) and code == "LOGIN_REQUIRED")
+                or (state == "AUTH_FAILED" and isinstance(item, AuthFailed) and code in AUTH_FAILURE_CAUSES)
+                or (state == "PROTOCOL_FAILED" and isinstance(item, ProtocolError) and code in PROTOCOL_CAUSES)
+                or (state == "NETWORK_FAILED" and isinstance(item, OSError) and code == "REFRESH_TEMPORARILY_UNAVAILABLE")):
+            cause = code
+            break
+        if state == "AUTH_FAILED" and _permission_denied(str(item)):
+            cause = "AUTHORIZATION_DENIED"
+            break
+        status = getattr(item, "status_code", None) or getattr(getattr(item, "response", None), "status_code", None)
+        if state == "AUTH_FAILED" and status in (401, 403):
+            cause = "HTTP_UNAUTHORIZED" if status == 401 else "HTTP_FORBIDDEN"
+            break
+    safe_stage = stage if stage in FAILURE_STAGES else "UNKNOWN"
+    kind = type(error).__name__
+    safe_type = kind if kind in ERROR_TYPES else "UNKNOWN"
+    return state, f"{cause} stage:{safe_stage} type:{safe_type}"
 
 
 def _data(response):
@@ -115,14 +188,22 @@ class Budget:
     def __init__(self, call_tool, limits):
         self.call_tool, self.limits = call_tool, limits
         self.deadline, self.calls = time.monotonic() + limits.round_timeout, 0
+        self.phase_limit = limits.rpc
+        self.stage, self.reports_sent = "ROUND", 0
+
+    def reserve_for_next(self, calls=0):
+        # Both directions share this counter and deadline. A phase can yield
+        # early without granting the other phase a fresh global budget.
+        self.phase_limit = self.limits.rpc - calls
 
     def check(self):
         remaining = self.deadline - time.monotonic()
-        if self.calls >= self.limits.rpc or remaining <= 0:
+        if self.calls >= min(self.limits.rpc, self.phase_limit) or remaining <= 0:
             raise BudgetExhausted()
         return remaining
 
     async def call(self, name, arguments):
+        self.stage = name.upper() if name.upper() in FAILURE_STAGES else "ROUND"
         remaining = self.check()
         self.calls += 1
         return _data(await asyncio.wait_for(self.call_tool(name, arguments),
@@ -169,7 +250,13 @@ async def _handle_pending(store, budget, verified):
             store.finish_event(event["event_id"])
             verified.append(record)
         except (ProtocolError, ValueError) as error:
-            reason = str(error) if isinstance(error, ProtocolError) else "LOCAL_RECORD_REJECTED"
+            if _auth_error(error) is not None:
+                raise
+            if isinstance(error, ProtocolError):
+                code = error.args[0] if len(error.args) == 1 and isinstance(error.args[0], str) else None
+                reason = code if code in PROTOCOL_CAUSES else "UNKNOWN_PROTOCOL_ERROR"
+            else:
+                reason = "LOCAL_RECORD_REJECTED"
             store.finish_event(event["event_id"], "HELD", reason)
 
 
@@ -181,41 +268,62 @@ async def flush_reports(store, call_tool, *, budget=None, limits=Limits()):
         receipt = await budget.call("publish_result", {key: report[key]
             for key in ("job_id", "event_id", "status", "result")})
         # Store verifies the full identity, hash and positive version atomically.
+        budget.stage = "REPORT_RECEIPT"
         store.mark_report_sent(report["event_id"], receipt)
         sent += 1
+        budget.reports_sent += 1
     return {"sent": sent, "calls": budget.calls}
 
 
-async def collect_once(store, call_tool, *, limits=Limits()):
-    """Persist complete pages, then reconcile data. Receipt is not execution/ACK."""
+async def collect_once(store, call_tool, *, limits=Limits(), first_lane="inbox"):
+    """Give receive/upload independent chances inside one shared round budget."""
+    if first_lane not in ("inbox", "outbox"):
+        raise ValueError("invalid first collection direction")
     budget, verified = Budget(call_tool, limits), []
-    received = sent = 0
+    received = 0
     state, detail = "OK", "ROUND_COMPLETE"
-    try:
-        await _handle_pending(store, budget, verified)
-        sent = (await flush_reports(store, call_tool, budget=budget, limits=limits))["sent"]
-        for _ in range(limits.pages):
-            page = await budget.call("list_events", {"cursor": store.cursor(), "limit": limits.page_size})
-            if not isinstance(page.get("events"), list) or len(page["events"]) > limits.page_size:
-                raise ProtocolError("INVALID_EVENT_PAGE")
-            received += store.ingest_page(page)["received"]
+    lanes = ("inbox", "outbox") if first_lane == "inbox" else ("outbox", "inbox")
+    for index, lane in enumerate(lanes):
+        later_work = index == 0 and (lanes[1] == "inbox" or bool(store.pending_reports(limit=1)))
+        # A result reconciliation needs get_job + get_result atomically within
+        # the round. Do not split a two-RPC budget into two unusable slices.
+        # Time is never halved: the priority direction retains the one global
+        # deadline, and the worker rotates priority across rounds.
+        budget.reserve_for_next(int(later_work and limits.rpc >= 3))
+        budget.stage = lane.upper()
+        try:
+            if lane == "outbox":
+                await flush_reports(store, call_tool, budget=budget, limits=limits)
+                continue
             await _handle_pending(store, budget, verified)
-            if not page["has_more"]:
+            for _ in range(limits.pages):
+                page = await budget.call("list_events", {"cursor": store.cursor(), "limit": limits.page_size})
+                if not isinstance(page.get("events"), list) or len(page["events"]) > limits.page_size:
+                    raise ProtocolError("INVALID_EVENT_PAGE")
+                received += store.ingest_page(page)["received"]
+                await _handle_pending(store, budget, verified)
+                if not page["has_more"]:
+                    break
+            else:
+                if page["has_more"] and state == "OK":
+                    state, detail = "BUDGET_EXHAUSTED", "PAGE_BUDGET"
+        except BudgetExhausted:
+            if state == "OK":
+                state, detail = "BUDGET_EXHAUSTED", "RPC_OR_TIME_BUDGET"
+        except Exception as error:
+            failure_state, failure_detail = _failure(error, budget.stage)
+            if failure_state != "NETWORK_FAILED" or not _is_transport_failure(error):
+                state, detail = failure_state, failure_detail
                 break
-        else:
-            if page["has_more"]:
-                state, detail = "BUDGET_EXHAUSTED", "PAGE_BUDGET"
-    except BudgetExhausted:
-        state, detail = "BUDGET_EXHAUSTED", "RPC_OR_TIME_BUDGET"
-    except Exception as error:
-        state = _auth_error(error) or ("PROTOCOL_FAILED" if isinstance(error, (ProtocolError, ValueError)) else "NETWORK_FAILED")
-        detail = {"AUTH_REQUIRED": "LOGIN_REQUIRED", "AUTH_FAILED": "AUTH_REJECTED",
-                  "PROTOCOL_FAILED": "RECORD_REJECTED", "NETWORK_FAILED": "TRANSPORT_FAILED"}[state]
+            if state != "NETWORK_FAILED":
+                state, detail = failure_state, failure_detail
+            # Only a recoverable transport failure yields to the other lane.
+            # The failed operation is not retried within this round.
     store.set_health("collector", state, detail)
     if state == "OK":
         store.set_health("collector_last_success", "OK", "ROUND_COMPLETE")
     return {"state": state, "calls": budget.calls, "received": received,
-            "sent": sent, "cursor": store.cursor(), "verified": verified,
+            "sent": budget.reports_sent, "cursor": store.cursor(), "verified": verified,
             "pending_events": len(store.pending_events(limit=1000)),
             "pending_reports": len(store.pending_reports(limit=1000))}
 
@@ -224,16 +332,28 @@ async def run_collector(store, client_factory, stop_event, *, limits=Limits(), i
     """Run bounded rounds. The CLI owns signal handlers and the one-writer lock."""
     if not isinstance(interval, (int, float)) or isinstance(interval, bool) or not math.isfinite(interval) or not 1 <= interval <= 3600:
         raise ValueError("invalid polling interval")
-    failures = 0
+    failures, first_lane = 0, "inbox"
     while not stop_event.is_set():
+        stage, result = "CLIENT_CREATE", None
         try:
             client = await client_factory()
+            stage = "CLIENT_OPEN"
             async with client:
-                result = await collect_once(store, client.call_tool, limits=limits)
+                stage = "ROUND"
+                result = await collect_once(store, client.call_tool, limits=limits, first_lane=first_lane)
+                stage = "CLIENT_CLOSE"
             state = result["state"]
         except Exception as error:
-            state = _auth_error(error) or "NETWORK_FAILED"
-            store.set_health("collector", state, "CLIENT_UNAVAILABLE")
+            if result is not None and result["state"] in {"AUTH_REQUIRED", "AUTH_FAILED", "PROTOCOL_FAILED"}:
+                # A later close failure must not turn an authentication stop
+                # into an automatically retried network error.
+                state = result["state"]
+            else:
+                state, detail = _failure(error, stage)
+                store.set_health("collector", state, detail)
+        # A busy direction can consume the shared time deadline. Alternate
+        # priority at every budget size, without adding persistent task state.
+        first_lane = "outbox" if first_lane == "inbox" else "inbox"
         if state in {"AUTH_REQUIRED", "AUTH_FAILED", "PROTOCOL_FAILED"}:
             return
         failures = failures + 1 if state == "NETWORK_FAILED" else 0

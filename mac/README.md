@@ -70,6 +70,14 @@ launchctl print "gui/$(id -u)/io.maccoordinationbridge.coordinator"
 
 本机已启用登录自启并回读后台 PID 与更新的成功收件时点，具体版本及覆盖见验证记录。单元没有打开 Mac 公网端口。Mac 睡眠时不能保证持续感知，恢复后沿原游标补读。
 
+## 收件／补传公平性与安全诊断
+
+收件和已持久 outbox 共用一个总 RPC 计数及单一轮次 deadline，不因切换方向重置预算。RPC 预算至少 3 时，首方向为后方向保留 1 次调用；1–2 RPC 不强行拆分，避免需要 `get_job` 加 `get_result` 的两步事件永久无法完成。worker 每轮轮换首方向，时间不固定减半；繁忙方向耗尽本轮时间时，另一方向在后续轮优先。预算必须能覆盖单事件必要调用，不承诺每轮两向都完成。一次 `collect_once` 是有界单轮，跨轮公平由持续 worker 实现。
+
+仅已知传输失败允许在剩余总预算内尝试另一方向，本轮不重试失败请求；未知／本地状态错误结束当前轮，原退避规则保留。明确认证、配置和整体协议失败停止分支；单事件已隔离为 HELD 的校验失败仍保留原原因与原 ID，不创建新执行。任何方向出现网络失败都不会因另一方向成功而记整体 OK，也不更新 `collector_last_success`。
+
+失败的 `health.detail` 采用 `CAUSE stage:STAGE type:TYPE`，仅记录固定白名单码／阶段／类型；未知项明确为 `UNKNOWN_CAUSE`／`UNKNOWN`，时间沿 `updated_at`。认证链中的安全原因优先于外层协议包装；原异常正文、URL、token、payload 不进入日志或状态。按组件与时间读取健康信息，旧 `network` 记录不代替新一轮 `collector` 结果。2026-11-02 的旧 AUTH_FAILED/CLIENT_UNAVAILABLE 根因仍 UNKNOWN，新测试不反推现场原因，也不增加自动登录、注册或新的重试分支。
+
 ## 定位 HELD 事件
 
 `held --cursor 0 --limit 25` 只读本地台账，按原 inbox cursor 升序返回 HELD 的原 event/job、类型、安全原因和可解析的创建时间；不包含任务正文、data 或凭据，不需要 OAuth 或网络。使用返回的 `next_cursor` 继续分页，`has_more=false` 表示当前尾页；空页保留输入游标。limit 范围 1–100；诊断游标不写回收件 cursor，不改变 HELD、配额或补传队列。不存在的台账不会被创建，身份不符则拒绝。
@@ -105,7 +113,7 @@ launchctl print "gui/$(id -u)/io.maccoordinationbridge.coordinator"
 
 ## 验证与边界
 
-在服务根运行 `python3 -m unittest discover -s tests -v`（106 项）。另用桥的独立解释器运行 `tests/smoke_client_transport.py`，9 项固定依赖测试不发外部网络，验证元数据窄重试、代理路由／超时／重定向保留及 OAuth 接合；不能把它加入标准库发现路径。台账／collector fake transport／hook 和安装测试只用标准库、临时目录和本地子进程，不调用外部模型或业务执行器。完整安装的依赖环境与真实 OAuth／工具调用单独验证，当前证据见 [verification.md](../docs/verification.md)。
+在服务根运行 `python3 -m unittest discover -s tests -v`（135 项）。另用桥的独立解释器运行 `tests/smoke_client_transport.py`，9 项固定依赖测试不发外部网络，验证元数据窄重试、代理路由／超时／重定向保留及 OAuth 接合；不能把它加入标准库发现路径。台账／collector fake transport／hook 和安装测试只用标准库、临时目录和本地子进程，不调用外部模型或业务执行器。完整安装的依赖环境与真实 OAuth／工具调用单独验证，当前证据见 [verification.md](../docs/verification.md)。
 
 本机数据库默认 32 MiB、未处理记录／待发报告各 500；VPS 配额保持原值。日志／journal／OAuth 状态／结果暂存另占空间，不自动删历史腾空间。当前无多 Mac claim/fencing、无服务端 stream identity；只允许同一未替换源数据库与单个资源写者。云端插件绑定和 Dot 自动唤醒不由本桥安装推导。
 
