@@ -124,6 +124,7 @@ class BridgeStore:
                 "CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS inbox(event_id TEXT PRIMARY KEY, cursor INTEGER UNIQUE NOT NULL, body TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'PENDING', reason TEXT NOT NULL DEFAULT '')",
                 "CREATE TABLE IF NOT EXISTS jobs(job_id TEXT PRIMARY KEY, payload_hash TEXT NOT NULL, status TEXT NOT NULL, cancel_requested INTEGER NOT NULL, latest_result_version INTEGER NOT NULL, created_at TEXT NOT NULL, routing TEXT NOT NULL)",
+                "CREATE TABLE IF NOT EXISTS coordinator_payloads(job_id TEXT PRIMARY KEY REFERENCES jobs(job_id), proof_hash TEXT NOT NULL, payload TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS sessions(session_id TEXT PRIMARY KEY, job_id TEXT REFERENCES jobs(job_id), cwd TEXT NOT NULL, state TEXT NOT NULL, last_event TEXT NOT NULL, last_turn_id TEXT NOT NULL, updated_at TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS hooks(hook_key TEXT PRIMARY KEY, body TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS reports(event_id TEXT PRIMARY KEY, job_id TEXT NOT NULL REFERENCES jobs(job_id), status TEXT NOT NULL, result TEXT NOT NULL, result_hash TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'PENDING', receipt TEXT, created_at TEXT NOT NULL)",
@@ -250,7 +251,9 @@ class BridgeStore:
                 "job_id": row["job_id"], "payload_hash": row["payload_hash"], "status": row["status"],
                 "cancel_requested": bool(row["cancel_requested"]), "latest_result_version": row["latest_result_version"]}
 
-    def record_job(self, record):
+    def record_job(self, record, *, proof_hash=None):
+        if proof_hash is not None and (not isinstance(proof_hash, str) or not DIGEST.fullmatch(proof_hash)):
+            raise ValueError("invalid coordinator proof digest")
         if not isinstance(record, dict) or not isinstance(record.get("payload"), dict):
             raise ValueError("job record and payload must be objects")
         job_id = _id(record.get("job_id"), "job_id")
@@ -287,7 +290,46 @@ class BridgeStore:
                     raise ValueError("job state moved backwards or conflicts with its version")
             connection.execute("INSERT INTO jobs VALUES (?,?,?,?,?,?,?) ON CONFLICT(job_id) DO UPDATE SET status=excluded.status,cancel_requested=excluded.cancel_requested,latest_result_version=excluded.latest_result_version",
                 (job_id, record["payload_hash"], status, int(record["cancel_requested"]), version, created_at, routing))
+            if proof_hash is not None and self._capture_capacity(connection, len(content.encode())):
+                connection.execute("INSERT OR IGNORE INTO coordinator_payloads VALUES (?,?,?)",
+                                   (job_id, proof_hash, content))
             return self._job(connection, job_id)
+
+    def coordinator_record(self, job_id, proof_hash):
+        with self._transaction() as connection:
+            row = connection.execute("SELECT j.*,c.payload FROM coordinator_payloads c JOIN jobs j USING(job_id) WHERE job_id=? AND proof_hash=?",
+                                     (job_id, proof_hash)).fetchone()
+            if not row:
+                return None
+            return {"job_id": job_id, "payload_hash": row["payload_hash"], "payload": json.loads(row["payload"]),
+                    "created_at": row["created_at"], "status": row["status"],
+                    "cancel_requested": bool(row["cancel_requested"]), "latest_result_version": row["latest_result_version"]}
+
+    def _capture_capacity(self, connection, size):
+        count, used = connection.execute("SELECT count(*),coalesce(sum(length(CAST(payload AS BLOB))),0) FROM coordinator_payloads").fetchone()
+        # Original inbox/outbox continue to own the bulk of the existing quota.
+        allowance = min(8 * 1024 * 1024, self.max_database_bytes // 4)
+        allocated = connection.execute("PRAGMA page_count").fetchone()[0]
+        unused = connection.execute("PRAGMA freelist_count").fetchone()[0]
+        page = connection.execute("PRAGMA page_size").fetchone()[0]
+        return count < 64 and used + size <= allowance and (allocated - unused + 4) * page + size < self.max_database_bytes
+
+    def known_uncaptured(self, candidates):
+        if not candidates:
+            return None
+        with self._transaction() as connection:
+            if not self._capture_capacity(connection, 1):
+                return None
+            for job_id, payload_hash in candidates:
+                if connection.execute("SELECT 1 FROM jobs j WHERE job_id=? AND payload_hash=? AND NOT EXISTS (SELECT 1 FROM coordinator_payloads c WHERE c.job_id=j.job_id)",
+                                      (job_id, payload_hash)).fetchone():
+                    return job_id
+        return None
+
+    def coordinator_report(self, job_id, event_id):
+        with self._transaction() as connection:
+            row = connection.execute("SELECT * FROM reports WHERE job_id=? AND event_id=?", (job_id, event_id)).fetchone()
+            return self._report(row) if row else None
 
     @classmethod
     def _binding(cls, connection, session_id):

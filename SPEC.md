@@ -80,3 +80,17 @@ ARCHITECTURE TRIAGE
 `cursor` 为本次诊断的排他下界，整数范围 0 到 2^63-1；`limit` 为 1 到 100 的整数，默认 25，两者均拒绝布尔值。结果为 `{events, next_cursor, has_more}`；按原 inbox cursor 升序，仅列 HELD，每页不超过 limit，空页保留输入 cursor。返回字段仅为 cursor、event_id、job_id、event_type、bridge_state、reason 和 created_at；后者只返回含时区的可解析 ISO 时间，否则为 null，不回显无约束时间字符串。原因沿原安全原因码；任务／结果正文、data、路由和凭据均不返回。
 
 查询核对数据库中的 source_id／consumer_id；数据库缺失或身份不符即拒绝，不创建目录或初始化新台账。`next_cursor` 只供下一次诊断分页，绝不写回收件 cursor。并发状态变化下分页不是快照：较早 PENDING 后转为 HELD 时，应从 0 重新检查；不能将继续分页当作完整历史通知或自动承接证据。
+
+## Mac 本机协调员端口 v1
+
+原 `bridge.py run` 在同一 collector 进程和原网络锁内，可选监听一个本机 Unix socket。启用文件固定为桥 `config.json` 同目录的 `coordinator-port.json`。无此配置时仅运行原收发。端口不会加载第二个 OAuth 客户端、发起执行或确认读取。VPS MCP、游标及旧 job 哈希保持原合同。
+
+**授权来源。** 本机密钥授权特定生产者调用本端口。云端原生主体与 Project item 的证明须由宿主维护方在带外按原 `job_id/payload_hash`、原始发送回执和实际 Project item 回读独立核准，再逐原件写入私有配置。服务没有签发云端身份的能力。共享账号、正文、项目别名和任意可打开 socket 的进程均不能新增 grant。宿主应把每份配置限定到已核的桥 source、consumer 和唯一协调员台账。来源凭据不足时保持空 grants。
+
+- 配置结构为 `{v:1,socket_path,keys,grants}`。keys 映射本机 key ID 到 32 字节随机密钥的 64 位小写十六进制。grant 精确包含 `key_id,actions,project_id,coordinator_id,recipient,report_route,job_id,payload_hash,origin,origin_ref,task`。同一 job 只有一份绑定，凭据和实际路由留在宿主。origin 字段为 `channel,subject`，task 为 `repository,project_ref,item_id,task_ref,evidence_ref`。actions 只允许显式勾选下述三个业务操作。以 `probe-` 开头的 key 只可探测，写入此类 key 的业务 grant 导致配置拒绝。
+- 每个连接只处理一个操作。UTF-8 NDJSON 每帧含 LF 上限 2 MiB，同时最多 4 个连接，单连接总时限 5 秒。服务先发 `{v:1,challenge}`，challenge 为新生成的 64 位十六进制串。请求为 `{v:1,op,...,auth:{key_id,mac}}`。规范化 JSON 使用排序键、UTF-8、紧凑分隔符、禁止非有限数值。请求 HMAC-SHA256 覆盖 ASCII `MBRIDGE/1`、NUL、challenge、NUL、去掉 auth 的规范化请求。已认证响应 `{v:1,ok,value|code,server_mac}` 的签名覆盖 `MBRIDGE/1/REPLY`、NUL、challenge、NUL、请求 mac、NUL、去掉 server_mac 的规范化响应。所有 MAC 为小写 hex，所有 NUL 均为一个零字节。未知 key、错误 MAC 或非法初始帧可收到无签名拒绝。没有有效响应签名就没有可采信的成功或已证实未入队。
+- `probe()` 只返回 `{service:"original-bridge",protocol:1,operations:["verified_job","lookup_report","enqueue_result"]}`。成功只证明本机签名往返。 `verified_job(job_id)` 返回可信 grant 中的 origin、origin_ref、task 及原 job_id、payload_hash、record。记录未保全时回 `UNAVAILABLE`。经认证的读取可要求原 collector 在既有共享时间与 RPC 预算内补读一条已知且摘要一致的原 job，仅在原请求上重查。没有本机路由记录的 ID 不会触发远端补读。原件持久保存在桥既有本机配额内，最多 64 份、小于等于 8 MiB 且不超过数据库上限四分之一。没有自动清理或扩容。
+- `lookup_report(job_id,event_id)` 按原事件查本机 outbox。已认证的 null 代表该 job 本机没有该事件。 `enqueue_result(project_id,job_id,payload_hash,event_id,status,result)` 仅接收已授权只读 QUERY_BLOCKER 的协调结果。服务核原项目、原请求、任务与 tracking、结果状态、核心版本／摘要和稳定事件 ID。核心结果上限 256 KiB，最终带 tracking 的 wire 结果上限 1 MiB。事件 ID 为 `coordinate-` 加规范化 `[coordinator_id,project_id,request_id,job_id,core_version]` 的 SHA-256。重复相同事件返回原记录，冲突拒绝。两种操作的记录字段为 `job_id,event_id,status,result_hash,state,receipt`。PENDING 表示已保存本机；SENT 附原服务器版本和哈希回执。云端精确读取与 ACK 仍走原受权读取方。
+- 拒绝码为 `ACCESS_DENIED`、`INVALID_REQUEST`、`CONFLICT` 和 `UNAVAILABLE`。未知结果、超时和丢确认只按原 job/event 查，不能由客户端换事件重发。仅读和排队按动作各自授权。
+
+**部署与恢复。** 安装规则及签名探针步骤见 [本机操作说明](mac/README.md#协调员本地签名探针)。未取得现任负责人、当前云端Dot和项目项的独立证明之前，只能验收已安装服务的探针及隔离数据。端口不提供身份登记、填充任命、远程开通、自动写 Projects 或代理业务 ACK 的操作。

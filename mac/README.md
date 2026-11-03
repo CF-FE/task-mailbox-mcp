@@ -118,3 +118,22 @@ launchctl print "gui/$(id -u)/io.maccoordinationbridge.coordinator"
 本机数据库默认 32 MiB、未处理记录／待发报告各 500；VPS 配额保持原值。日志／journal／OAuth 状态／结果暂存另占空间，不自动删历史腾空间。当前无多 Mac claim/fencing、无服务端 stream identity；只允许同一未替换源数据库与单个资源写者。云端插件绑定和 Dot 自动唤醒不由本桥安装推导。
 
 云端 Dot 的 whoami／mailbox_usage 成功已有公子转述的实际调用回报；它不替代本桥授权、nonce 或云端 hook 验收。[官方企业边界](https://learn.chatgpt.com/docs/enterprise/agent-security#hooks-in-local-computer-access-with-work-cloud)仅在 enterprise managed policy 与 remote hooks 启用等条件下支持 Global `requirements.toml` 的管理员远端 `mcp_tool` hook；personal accounts 不适用，本地 command／插件 hook 不支持云编排。本桥不承诺自动唤醒 Dot。
+
+## 协调员本地签名探针
+
+必须先有原桥安装、唯一网络锁和经批准的本次升级窗口。保存原固定提交、运行文件摘要、原 launchd 配置与私有配置的适当备份。沿原维护方升级流程复制新固定版本全部 `mac/*.py` 和原运行依赖说明，包含 `coordinator_port.py` 和 `prepare_coordinator_probe.py`。不复制或重建 OAuth，不换 DB、source、consumer、端点或游标。
+
+1. 由宿主维护者选择短的 Unix socket 绝对路径，其父目录及政策和 client key 父目录是既有同用户 0700 真实目录。私有文件要求 0600，拒绝符号链接和不安全上级目录。为 socket 使用专用目录并核未被占用。不要把工具或密钥交给工作负载。能任意读取同一账户私有文件的进程处于同一信任域；有敌对本机进程时需先建立适当 OS 隔离，不能用 0600 宣称多租户隔离。
+2. 使用既有 Python 3.10+ 和本次固定版本准备独立探针 key。以下环境变量由维护者设置，`BRIDGE_CONFIG_DIR` 是既有 config.json 的父目录，`KEY_FILE` 是协调员私有的密钥文件。工具保持现有 grants、路由和其它 key，不打印密钥、不启动监听。
+
+   ```bash
+   "$PYTHON" "$RELEASE/prepare_coordinator_probe.py" \
+     --policy "$BRIDGE_CONFIG_DIR/coordinator-port.json" --socket "$SOCKET_PATH" \
+     --client-key "$KEY_FILE" --key-id probe-v1
+   ```
+
+3. 在批准窗口内沿原 service 启停流程切换唯一 `run`。原锁、原 OAuth 和原 collector 保持单一所有者。只读核原 launchd 与 collector，检查新端口为 `READY`，并用已核私有路径、key ID/文件和真实协调客户端发一次 `probe`，独立核响应签名、protocol=1、scope 和三项操作清单。空 grants 不调用业务操作。健康记录是上次观察，不能替代探针。本机探针不代表 Dot 已读、来源已认证或业务联系成功。
+4. 轮换时用新 client 文件与新 `probe-v2` 重跑准备命令。先用新 key 实测探针，再带原新 key 参数增加 `--retire-probe probe-v1`。旧 key 随后不再受理，旧文件保留在原私有位置由维护方处置。业务 key 及原件证明由宿主任命权威另行配置；探针工具不授业务权限。新配置原子替换后用于后续请求。业务来源字段已被原件冻结，不能用替换证据把旧 job 归给另一个主体。
+5. 撤回时停止原 `run`，确认原进程已退出，备份并移出可选配置，沿原维护入口恢复原版或禁用端口的桥。保留 SQLite、OAuth、未决 outbox 和稳定 ID；本次仅新增关联表，旧逻辑仍可读取旧表。确认原 collector 健康和端口关闭。未知路径或遗留 socket 均拒覆盖；正常退出只清理本次创建的 socket。异常退出后须由宿主核该 socket 的所有者、原进程已消失和原路由，再处置其遗留文件。端口拒绝启动时原 collector 继续运行，端口健康显示 `UNAVAILABLE`。
+
+数据接口、密钥用途、消息签名和拒绝码见 [v1 合同](../SPEC.md#mac-本机协调员端口-v1)。部署前后分别记录固定 Git 提交、安装摘要、原服务状态、本机签名探针和确实获得的远端凭据。

@@ -1,6 +1,7 @@
 """Mac Coordination Bridge CLI. No business executor or arbitrary command handler."""
 
 import argparse
+from contextlib import AsyncExitStack
 import asyncio
 import fcntl
 import json
@@ -54,7 +55,24 @@ async def network(args, config, store):
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
-    await run_collector(store, factory, stop, limits=Limits(), interval=30)
+    async with AsyncExitStack() as stack:
+        port = None
+        policy = Path(args.config).with_name('coordinator-port.json')
+        if os.path.lexists(policy):
+            try:
+                from coordinator_port import CoordinatorPort
+                candidate = CoordinatorPort(policy, store)
+                await stack.enter_async_context(candidate.listening())
+            except (OSError, ValueError, TypeError, KeyError, RecursionError):
+                store.set_health('coordinator_port', 'UNAVAILABLE', 'LOCAL_PORT_REFUSED')
+            else:
+                port = candidate
+                store.set_health('coordinator_port', 'READY', 'LOCAL_PORT_LISTENING')
+        try:
+            await run_collector(store, factory, stop, limits=Limits(), interval=30, port=port)
+        finally:
+            if port is not None:
+                store.set_health('coordinator_port', 'STOPPED', 'COLLECTOR_STOPPED')
     state = next((h['state'] for h in store.snapshot()['health'] if h['component'] == 'collector'), 'STOPPED')
     return {'collector': state, 'execution_enabled': False}
 

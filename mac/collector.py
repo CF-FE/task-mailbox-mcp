@@ -210,7 +210,7 @@ class Budget:
                                           min(self.limits.call_timeout, remaining)))
 
 
-async def _handle_pending(store, budget, verified):
+async def _handle_pending(store, budget, verified, port=None):
     for event in store.pending_events(limit=100):
         budget.check()
         kind, data = event["event_type"], event["data"]
@@ -246,7 +246,7 @@ async def _handle_pending(store, budget, verified):
                     raise ProtocolError("RESULT_EVENT_MISSING")
                 record["result"] = result
             # The ledger owns payload/schema validation and immutable identity.
-            store.record_job(job)
+            store.record_job(job, proof_hash=port.capture_proof(job) if port else None)
             store.finish_event(event["event_id"])
             verified.append(record)
         except (ProtocolError, ValueError) as error:
@@ -275,7 +275,7 @@ async def flush_reports(store, call_tool, *, budget=None, limits=Limits()):
     return {"sent": sent, "calls": budget.calls}
 
 
-async def collect_once(store, call_tool, *, limits=Limits(), first_lane="inbox"):
+async def collect_once(store, call_tool, *, limits=Limits(), first_lane="inbox", port=None):
     """Give receive/upload independent chances inside one shared round budget."""
     if first_lane not in ("inbox", "outbox"):
         raise ValueError("invalid first collection direction")
@@ -295,18 +295,27 @@ async def collect_once(store, call_tool, *, limits=Limits(), first_lane="inbox")
             if lane == "outbox":
                 await flush_reports(store, call_tool, budget=budget, limits=limits)
                 continue
-            await _handle_pending(store, budget, verified)
+            await _handle_pending(store, budget, verified, port)
             for _ in range(limits.pages):
                 page = await budget.call("list_events", {"cursor": store.cursor(), "limit": limits.page_size})
                 if not isinstance(page.get("events"), list) or len(page["events"]) > limits.page_size:
                     raise ProtocolError("INVALID_EVENT_PAGE")
                 received += store.ingest_page(page)["received"]
-                await _handle_pending(store, budget, verified)
+                await _handle_pending(store, budget, verified, port)
                 if not page["has_more"]:
                     break
             else:
                 if page["has_more"] and state == "OK":
                     state, detail = "BUDGET_EXHAUSTED", "PAGE_BUDGET"
+            # Older ledgers retain only routing. Reconcile one already known,
+            # explicitly attested original inside the existing inbox RPC budget.
+            if port is not None and (original := port.next_missing()):
+                job = await budget.call("get_job", {"job_id": original})
+                if job.get("job_id") != original:
+                    raise ProtocolError("JOB_IDENTITY_MISMATCH")
+                proof_hash = port.capture_proof(job)
+                if proof_hash is not None:
+                    store.record_job(job, proof_hash=proof_hash)
         except BudgetExhausted:
             if state == "OK":
                 state, detail = "BUDGET_EXHAUSTED", "RPC_OR_TIME_BUDGET"
@@ -328,7 +337,7 @@ async def collect_once(store, call_tool, *, limits=Limits(), first_lane="inbox")
             "pending_reports": len(store.pending_reports(limit=1000))}
 
 
-async def run_collector(store, client_factory, stop_event, *, limits=Limits(), interval=30):
+async def run_collector(store, client_factory, stop_event, *, limits=Limits(), interval=30, port=None):
     """Run bounded rounds. The CLI owns signal handlers and the one-writer lock."""
     if not isinstance(interval, (int, float)) or isinstance(interval, bool) or not math.isfinite(interval) or not 1 <= interval <= 3600:
         raise ValueError("invalid polling interval")
@@ -340,7 +349,7 @@ async def run_collector(store, client_factory, stop_event, *, limits=Limits(), i
             stage = "CLIENT_OPEN"
             async with client:
                 stage = "ROUND"
-                result = await collect_once(store, client.call_tool, limits=limits, first_lane=first_lane)
+                result = await collect_once(store, client.call_tool, limits=limits, first_lane=first_lane, port=port)
                 stage = "CLIENT_CLOSE"
             state = result["state"]
         except Exception as error:
