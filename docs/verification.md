@@ -288,5 +288,6 @@ Herdr 后续限定试点已由其实施主线程完成一次真实执行／产�
 | 正式 Mac 原桥升级 | PASS | 既有正式安装目录已升级到 `b6dc6b6dafff08f4ba25ddd999df4e679bb4a802`。原 collector 在维护窗口内停止、启动，北京时间 18:02:23 回读健康 `OK`。13/13 个运行文件的摘要同时匹配固定 Git 对象及安装收据。 |
 | 升级连续性 | PASS | 维护方前后核对原核心台账及 hooks、config、plist 一致。本次沿用原 OAuth 和原状态目录，无迁移。 |
 | 隔离工程联测 | PASS | 固定 Herdr `418b5a2` 与本桥 `b6dc6b6`，使用合成身份及临时数据验证本机 socket 双向签名、原 collector 收发、丢确认后按原事件对账，以及指定结果版本／摘要的读取和 ACK。Herdr 97 项、信箱 147 项回归和 9 项 SDK 冒烟检查通过。 |
-| 正式 Mac 签名探针 | NOT_RUN | 截至本记录，生产探测密钥待公子确认，尚未取得生产 `PORT_VERIFIED` 回执。[探针与轮换步骤](../mac/README.md#协调员本地签名探针) |
-| 云端 Dot 真实联络 | NOT_RUN | 未配置生产业务 grants。本轮真实业务请求、负责人答复均为 0，未取得云端 Dot 对本次请求的原生读取回执。 |
+| 正式 Mac 签名探针 | PASS | 北京时间 18:08:42.833，正式安装的协调员 `418b5a2` 对原桥 `b6dc6b6` 完成签名往返，回读 `PORT_VERIFIED / LOCAL_BRIDGE_PORT / protocol=1`。监听为 `READY`，原 collector 进程为 `RUNNING`，配置及 socket 权限均为 0600。业务 grants 为 0，一次手动 pump 返回 `NO_PILOT`。[探针与轮换步骤](../mac/README.md#协调员本地签名探针) |
+| 原 collector 远端轮询 | PASS（单次回合） | 启用探针前，北京时间 18:06:30 回读 `NETWORK_FAILED / CLIENT_OPEN`，具体原因仍为 `UNKNOWN`。重载后，18:10:04.801 回读 `OK / ROUND_COMPLETE`。原桥已有报告 3 份，待补传 0，按生产授权捕获的原件为 0。 |
+| 云端 Dot 真实联络 | NOT_RUN | 本次生产协调台账的项目、请求、联系和结果计数均为 0。本轮真实业务请求与负责人答复均为 0，尚无云端 Dot 对本次请求的原生读取回执。 |
