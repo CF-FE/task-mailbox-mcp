@@ -9,7 +9,7 @@
                                                         主动读取、按原授权承接
 ```
 
-VPS 服务只收发和保存数据。本仓新增 [Mac 协调桥](mac/README.md)，主动拉取事件、保存本机台账、感知配置范围内的 Codex 会话并补传显式结果。桥不自动执行任务，不增加 AI 层，不保证唤醒 Dot；Mac 的 Herdr 控制与项目执行沿既有入口，提交、结果报告和读取确认分别留证。
+VPS 服务只收发和保存数据。本仓新增 [Mac 协调桥](mac/README.md)，主动拉取事件、保存本机台账、感知配置范围内的 Codex 会话并补传显式结果。桥不自动执行任务，不增加 AI 层，不保证唤醒 Dot；Mac 的 Herdr 控制与项目执行沿既有入口；[Herdr仓Lead显式执行适配器](https://github.com/CF-FE/herdr-4-codexcloud/blob/main/docs/herdr-executor.md)已取得一次Mac合成执行／回传的限定工程验收，自动消费／无人值守派发及Win／Cloud扩展仍未实现或未验。提交、结果报告、读取确认和生产业务验收分别留证。
 
 后续项目协作的统一查看、派发前核读、原仓库资产归属、Iteration 和结果关联，见[Projects 关联契约](docs/projects.md)。正式状态沿原 Projects／任务正文维护；信箱保留固定引用。
 

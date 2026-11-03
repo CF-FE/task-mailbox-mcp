@@ -55,7 +55,7 @@ VPS 临时回环重跑已取得 9 工具、两个模拟客户端收发、账号�
 
 ## 后续事件与 Codex App 钩子
 
-[事件与钩子方案](docs/hooks.md)已有 [Mac 实现](mac/README.md)：单 collector、原子本机收件／游标、项目关联、会话观察、显式 session/turn/job 报告和稳定 ID 补传。公子已授权推进这一范围，感知限定 Herdr 与信箱项目；生命周期钩子仅作适配器，不执行任意任务。VPS 九项工具契约、取消语义和认证边界保持不变，云端 Dot 唤醒及受控执行 handler 仍未实现。
+[事件与钩子方案](docs/hooks.md)已有 [Mac 实现](mac/README.md)：单 collector、原子本机收件／游标、项目关联、会话观察、显式 session/turn/job 报告和稳定 ID 补传。公子已授权推进这一范围，感知限定 Herdr 与信箱项目；生命周期钩子仅作适配器，不执行任意任务。VPS 九项工具契约、取消语义和认证边界保持不变，云端 Dot 唤醒、信箱自动消费／无人值守派发仍未实现。独立的[Lead显式Mac执行适配器](https://github.com/CF-FE/herdr-4-codexcloud/blob/main/docs/herdr-executor.md)在Herdr仓完成首版限定工程验收；它不属于本服务／桥的执行能力，不扩大到Win／Cloud、任意任务或生产业务。
 
 ## GitHub Projects 关联增量
 

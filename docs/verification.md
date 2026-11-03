@@ -33,17 +33,17 @@
 | Mac 本地实现与本仓复测 | PASS | 本仓完整 135 项测试已由主执行侧在既有独立 Mac 环境复跑通过：原 Store 17、台账 20、collector 40、hook 10、CLI／安装 8、浏览器交接／日志 4、引用校验 21、关联综合 9、HELD 查询 6 |
 | Mac 桥独立安装 | PASS | 独立源码副本、摘要回读、0700 运行目录、0600 配置／钩子定义、实际 SQLite 状态回读及 plist lint；没有启动模型／Herdr／业务 handler |
 | Mac 桥依赖与加密客户端初始化 | PASS | Python 3.13.1 x86_64，FastMCP 4.0.11、MCP 2.3.0、cryptography 48.0.1，共 66 依赖；临时目录中实际构造客户端、私密权限与缺缓存拒绝测试通过，无外部请求 |
-| Codex App 原生钩子触发（已观察四类） | PASS | 公子已审阅并信任已安装定义；主执行侧直接回读本地 live 台账，session 与本对话对应，观察到 SessionStart／PreToolUse／PostToolUse／UserPromptSubmit。只覆盖实际观察的四类，不推定其余三类或 CLI 模型回合已触发 |
+| Codex App 原生钩子触发 | PASS | 公子已信任定义，早期已直接观察SessionStart／PreToolUse／PostToolUse／UserPromptSubmit；本次Lead真实自然Stop又实际将暂存结果入outbox并由collector上送。只覆盖已有证据，不推定七类全覆盖或CLI每类事件均触发 |
 | Mac 桥专用 OAuth | PASS | 公子再次明确要求重新授权后，同一专用客户端完成 token POST 200、后续 MCP 请求 200 及 whoami 成功；保留自有加密缓存，未改代理／TLS／端点。此前尝试的交换状态仍为历史 UNKNOWN |
 | Mac 桥真实网络收件／回传 | PASS | collector 实际接收原 JOB_PERSISTED，get_job 核原 ID／payload 摘要；小结果先本地安全保存并入 outbox，再以原 event_id 上传，回执精确匹配 v1／hash。当前桌面会话经云端 App 实际读全并核对原结果后 ACK；无模型／业务派发 |
 | Mac 人工收件窗口 | PASS | 手动运行 120 秒，启动 3 轮；结束时 collector=OK、待处理事件／报告均为 0，进程已自然退出。只证明此短窗口，不提升为长期在线 |
 | Mac 持续收件进程 | PASS | 公子明确授权推进后，用户 launchd 已 bootstrap；RunAtLoad=true、KeepAlive=false，原生回读 running／PID 及新的 collector=OK 成功时点。网络错误由进程内退避，认证／协议错误停止；没有异常退出自动重启或长期稳定性验收 |
 | CF-FE 原 GitHub 连接写入 | PASS | 同一原连接实际创建并独立回读 CF-FE/task-mailbox-mcp Issue #1，关联原正式总览后回读 Repository=CF-FE/task-mailbox-mcp、Status=In Progress；未改 OAuth 权限或换凭据。个人整合仓403不推广为CF-FE授权故障 |
-| Herdr／模型／业务执行 | NOT_RUN | 信箱没有执行能力；进程、HTTP 或数据闭环均不代替业务验收 |
+| 信箱自动消费／无人值守业务派发 | NOT_RUN | 信箱／桥没有执行能力；独立[Lead显式Mac适配器](https://github.com/CF-FE/herdr-4-codexcloud/blob/main/docs/herdr-executor.md)已取得首版限定执行／回传工程验收，生产业务仍未验 |
 
 VPS 当前运行时为 Python 3.14.4、FastMCP 4.0.11、MCP 2.3.0、uvicorn 0.54.0。真实端点、账号、插件 ID、原始输出及认证状态留在私密落点，公开文档只用别名。
 
-本机 CLI 回读 `hooks stable true`，未自定义 `CODEX_HOME`，有效用户 hook 文件为 `~/.codex/hooks.json`。同一 Codex host 的 App／CLI 使用这套配置；本次真实事件来自当前 App 会话，没有运行 CLI 模型 turn，因此配置共享不能代替 CLI 原生触发验收。台账保存的是最近观察与时点，不证明原生进程持续在线或业务完成。
+本机 CLI 回读 `hooks stable true`，未自定义 `CODEX_HOME`，有效用户 hook 文件为 `~/.codex/hooks.json`。同一 Codex host 的 App／CLI 使用这套配置；原共享配置验证阶段的真实事件来自App，当时未运行CLI模型turn；后续独立Herdr适配器已完成一个CLI合成回合，但模型执行与各类CLI hook触发仍须分开取证，不能由共享配置推定。台账保存的是最近观察与时点，不证明原生进程持续在线或业务完成。
 
 ## 现场资源与排障边界
 
@@ -277,4 +277,4 @@ Worker／角色库共 22 文件、111,320 字节，仅标准库离线选型／�
 
 公子另已授权 Herdr 项目协调层确定性执行适配器开发，正式任务归 [Herdr #1](https://github.com/CF-FE/herdr-4-codexcloud/issues/1)，规范及后续执行事实由该仓维护；本 Issue 继续承载传输组件与原关联，VPS 九工具、Mac 桥及 hook 不因此取得执行权。本节的发布／差异复核不是新增适配器、模型回合或业务验收的完成回执。
 
-Herdr 后续限定试点已由其实施主线程完成一次真实执行／产物核验，详见 [Herdr 执行适配器规范](https://github.com/CF-FE/herdr-4-codexcloud/blob/main/docs/herdr-executor.md)；本服务没有新增执行工具或更换运行源码。该结果已用 Lead 自己的真实 Codex session／turn `bind` 和 `stage-report`，状态仍为 `WAITING_FOR_BOUND_SESSION_STOP`，没有伪造 Stop、直接发布或第二 collector，出件与读取 ACK 仍待取证。主执行侧另直接读到最后成功 2026-11-03T02:12:30Z、02:16:30Z collector=`NETWORK_FAILED / UNKNOWN_CAUSE stage:CLIENT_OPEN type:RuntimeError`；当前原因 UNKNOWN，沿原退避，不据此认定认证失效、重登录或业务失败。原任务保持 Open，等待自然 Stop 后按稳定 event／hash 对账。
+Herdr 后续限定试点已由其实施主线程完成一次真实执行／产物核验，详见 [Herdr 执行适配器规范](https://github.com/CF-FE/herdr-4-codexcloud/blob/main/docs/herdr-executor.md)；本服务没有新增执行工具或更换运行源码。该结果已用 Lead 自己的真实 Codex session／turn `bind` 和 `stage-report`；真实自然 Stop 于北京时间2026-11-03 10:25:49将其排入原outbox。原collector在既定退避中自行恢复，10:31:52直接回读collector=OK及原report=SENT／v1／同hash；期间没有重启、重新登录、改路由／认证／代理／TLS、第二客户端或业务二发。原review实际读全v1，与2973字节原件逐字段及canonical hash一致，10:34:55写稳定读ACK并再读持久事件；实施主线程直接核本地ACK游标10／HANDLED、待收和待补传0。没有伪造Stop、直接发布或第二collector。主执行侧另直接读到最后成功 2026-11-03T02:12:30Z、02:16:30Z collector=`NETWORK_FAILED / UNKNOWN_CAUSE stage:CLIENT_OPEN type:RuntimeError`；当前原因 UNKNOWN，沿原退避，不据此认定认证失效、重登录或业务失败。原事件已按稳定event／hash完成对账；本Issue因长期稳定性和正式业务范围仍保持Open。此次自然CLIENT_OPEN异常期间的持久缓存和补传已取得一个真实样本，不能代替物理断网／崩溃注入或24小时稳定性。Herdr自身首版工程任务沿其原Issue限定验收，不据此关闭本服务的稳定性待办。
