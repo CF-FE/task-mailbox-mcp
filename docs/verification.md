@@ -291,3 +291,22 @@ Herdr 后续限定试点已由其实施主线程完成一次真实执行／产�
 | 正式 Mac 签名探针 | PASS | 北京时间 18:08:42.833，正式安装的协调员 `418b5a2` 对原桥 `b6dc6b6` 完成签名往返，回读 `PORT_VERIFIED / LOCAL_BRIDGE_PORT / protocol=1`。监听为 `READY`，原 collector 进程为 `RUNNING`，配置及 socket 权限均为 0600。业务 grants 为 0，一次手动 pump 返回 `NO_PILOT`。[探针与轮换步骤](../mac/README.md#协调员本地签名探针) |
 | 原 collector 远端轮询 | PASS（单次回合） | 启用探针前，北京时间 18:06:30 回读 `NETWORK_FAILED / CLIENT_OPEN`，具体原因仍为 `UNKNOWN`。重载后，18:10:04.801 回读 `OK / ROUND_COMPLETE`。原桥已有报告 3 份，待补传 0，按生产授权捕获的原件为 0。 |
 | 云端 Dot 真实联络 | NOT_RUN | 本次生产协调台账的项目、请求、联系和结果计数均为 0。本轮真实业务请求与负责人答复均为 0，尚无云端 Dot 对本次请求的原生读取回执。 |
+
+## 2026-11-03 原计划回收与单件自然首发适配
+
+当前总任务沿 [本仓 Issue #1](https://github.com/CF-FE/task-mailbox-mcp/issues/1) 和原 CF-FE 项目协作总览维护，保持 Open / In Progress。下表是后续证据，不改写上述 18 时观察的历史范围。
+
+| 对象 | 状态 | 证据与边界 |
+| --- | --- | --- |
+| 原收件器恢复 | PASS（有限恢复） | 原单元20:51因 AUTH_REJECTED / CLIENT_CLOSE 停止；21:53以原缓存、原锁执行一次禁交互whoami成功，随后只恢复原单元一次。21:55及21:59有新的完整收件OK。未新登录/注册或改端点，现场认证及间歇网络错误根因仍UNKNOWN。 |
+| 无结果提醒的回收 | PASS（限定样本） | 原Dot浏览器首发一次；负责人答复经原Mac outbox上传，服务端22:09:32保存v1/cursor18；22:23:42保存精确同版本/hash的ACK/cursor19，Mac22:32处理为HANDLED。原主协调未在发布后提示结果或手工触发计划，随后只读原会话核真实答复和同件ACK。此样本首次投递依赖网页，不能算全程后台首发。 |
+| 原计划的独立运行归属 | PARTIAL | 原会话把读取关联到既有休息计划，名义22:30、实际22:23左右；没有独立run_id/调用卡，不认定准点。公子后续要求不再验调度准点性，同一新探针首发后等待5分钟再读，避免反复增加真实任务。 |
+| 单件端口适配 | PASS（源码与Mac安装） | 固定源码[2c790d9](https://github.com/CF-FE/task-mailbox-mcp/commit/2c790d9dc0c431aa823a6980cf6bb299abc2505c)已发布。新6项及原端口12项通过，主执行侧一次全仓标准库检查153项通过。23:00:43原Mac完成最小升级，13份文件匹配固定对象及receipt；原业务表、OAuth、config、hooks及plist保全。只保存真实nonce原件、核验协调员回执并入原outbox，桥不生成协调员答案。 |
+| 单件临时准入及撤回 | PASS（限定一件） | 新增配对key/grant的部署协调请求先被自动审批以额外访问权限变更拒绝；公子随后明确“允许这一次，完成即撤”，最迟次日00:30到期。只在批准后配置唯一固定job/hash的三个本机操作。23:35:01已撤新增key/grant、删除协调端client；回读原端口配置逐字节等于开通前基线，grants=0，仅原探针key。原collector未重启，结果和历史保留。 |
+| 原收件器升级后运行 | PASS（有限观察） | 新进程原端口READY，本单client完成真实签名probe；23:02:31取得新的完整collector OK。期间仍有CLIENT_OPEN网络失败，按原退避，不新授权或反复重启，不升格长期稳定性。 |
+| 同件自然首发/协调员自动处理 | PASS（只读连通性） | 唯一包在开通前核实未入箱。原主协调只保存既有休息计划的单件条款，关闭页面后不发消息或点击运行。服务23:28:20持久接收唯一任务/cursor20；Mac协调员经签名端口读取真实nonce，独立持久生成答复，23:28:44进入原桥outbox；服务23:29:17保存唯一v1/cursor21，Mac报告SENT。无模型、shell、负责人联系或生产写入。 |
+| 原Dot实际读取及确认 | PASS（同版本/摘要） | 原Dot自行读回并在23:34:04保存固定ACK/cursor22，v1及结果hash与冻结包、协调员输出、服务及Mac记录一致。原主协调只读原Dot会话确认回报；本实施侧仅查事件元数据及本地台账，没有代理submit、publish_result、get_result或ack_result_read。23:35回读三个事件均HANDLED，只有一个结果事件和版本。 |
+
+本轮结论：限定一件的只读后台投递、协调员自动答复、结果回传和原Dot读确认闭环通过，临时准入已撤。单件合同和到期/补传边界见 [SPEC](../SPEC.md#原计划的单件连通性任务)，协调员源码及独立处理记录归 [Herdr仓](https://github.com/CF-FE/herdr-4-codexcloud/blob/main/docs/project-coordinator.md)维护。运行无需浏览器或公子转发；原计划设置及事后只读验收用到原生页面，与运行触发分记。按公子要求不再验调度准点性，未取得的独立调度器run_id不补造。
+
+VPS、MCP Events均未更新，原台账及OAuth保留。直接合入main曾被自动审批以未明确授权绕过PR且实测未完成拒绝，当前改走[PR #3](https://github.com/CF-FE/task-mailbox-mcp/pull/3)审阅，未合并主分支。这次只读样本不代表24小时稳定性、通用项目自动派发或业务验收；本Issue仍因长期稳定性待办保持开放。

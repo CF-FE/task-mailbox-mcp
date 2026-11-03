@@ -113,7 +113,7 @@ launchctl print "gui/$(id -u)/io.maccoordinationbridge.coordinator"
 
 ## 验证与边界
 
-在服务根运行 `python3 -m unittest discover -s tests -v`（135 项）。另用桥的独立解释器运行 `tests/smoke_client_transport.py`，9 项固定依赖测试不发外部网络，验证元数据窄重试、代理路由／超时／重定向保留及 OAuth 接合；不能把它加入标准库发现路径。台账／collector fake transport／hook 和安装测试只用标准库、临时目录和本地子进程，不调用外部模型或业务执行器。完整安装的依赖环境与真实 OAuth／工具调用单独验证，当前证据见 [verification.md](../docs/verification.md)。
+在服务根运行 `python3 -m unittest discover -s tests -v`（153 项）。另用桥的独立解释器运行 `tests/smoke_client_transport.py`，9 项固定依赖测试不发外部网络，验证元数据窄重试、代理路由／超时／重定向保留及 OAuth 接合；不能把它加入标准库发现路径。台账／collector fake transport／hook 和安装测试只用标准库、临时目录和本地子进程，不调用外部模型或业务执行器。完整安装的依赖环境与真实 OAuth／工具调用单独验证，当前证据见 [verification.md](../docs/verification.md)。
 
 本机数据库默认 32 MiB、未处理记录／待发报告各 500；VPS 配额保持原值。日志／journal／OAuth 状态／结果暂存另占空间，不自动删历史腾空间。当前无多 Mac claim/fencing、无服务端 stream identity；只允许同一未替换源数据库与单个资源写者。云端插件绑定和 Dot 自动唤醒不由本桥安装推导。
 
@@ -137,3 +137,9 @@ launchctl print "gui/$(id -u)/io.maccoordinationbridge.coordinator"
 5. 撤回时停止原 `run`，确认原进程已退出，备份并移出可选配置，沿原维护入口恢复原版或禁用端口的桥。保留 SQLite、OAuth、未决 outbox 和稳定 ID；本次仅新增关联表，旧逻辑仍可读取旧表。确认原 collector 健康和端口关闭。未知路径或遗留 socket 均拒覆盖；正常退出只清理本次创建的 socket。异常退出后须由宿主核该 socket 的所有者、原进程已消失和原路由，再处置其遗留文件。端口拒绝启动时原 collector 继续运行，端口健康显示 `UNAVAILABLE`。
 
 数据接口、密钥用途、消息签名和拒绝码见 [v1 合同](../SPEC.md#mac-本机协调员端口-v1)。部署前后分别记录固定 Git 提交、安装摘要、原服务状态、本机签名探针和确实获得的远端凭据。
+
+## 复用原云端检查计划
+
+原计划可预设一件获准的[确定性连通性任务](../SPEC.md#原计划的单件连通性任务)：自然提交冻结的 job/hash，Mac 协调员从上述签名端口读真实 nonce 并持久生成答复，原桥 outbox 自动上传，Dot 等待后读精确版本并 ACK。桥不生成协调员答复，不代理 Dot 的读确认；没有单件 grant 时维持原收件行为。
+
+试验前保全原端口配置，仅增加此件专用 key/grant；保持原 endpoint、OAuth、台账、hook、launchd 和游标。协调员处理入口的源码、固定安装和独立处理记录在所属 Herdr 仓维护。试后撤销此件准入、停止该短命处理程序并回读基线；保留已持久报告和证据。VPS 无需为该模式更新或部署 MCP Events。真实状态统一记入 [验证记录](../docs/verification.md)，不能从本机端口测试推定原 Dot 已运行。

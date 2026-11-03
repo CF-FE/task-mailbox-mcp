@@ -94,3 +94,20 @@ ARCHITECTURE TRIAGE
 - 拒绝码为 `ACCESS_DENIED`、`INVALID_REQUEST`、`CONFLICT` 和 `UNAVAILABLE`。未知结果、超时和丢确认只按原 job/event 查，不能由客户端换事件重发。仅读和排队按动作各自授权。
 
 **部署与恢复。** 安装规则及签名探针步骤见 [本机操作说明](mac/README.md#协调员本地签名探针)。未取得现任负责人、当前云端Dot和项目项的独立证明之前，只能验收已安装服务的探针及隔离数据。端口不提供身份登记、填充任命、远程开通、自动写 Projects 或代理业务 ACK 的操作。
+
+## 原计划的单件连通性任务
+
+ARCHITECTURE TRIAGE
+- Path: BOUNDARY_NOTE
+- Evidence: 原 collector 已核原件并持久保存，签名本机端口已有 `verified_job / enqueue_result / lookup_report`，独立协调员负责结果生成，原 outbox 负责上传。
+- Boundary impact: grant 可显式增加 `transport_probe:{nonce,expires_at}`，仅允许一件固定 ID/hash 的确定性数据回执；不增加操作、进程执行点、VPS 工具或网络客户端。
+- Preserved: 协调桥只核验、保存和补传；Mac 协调员必须实际读取 nonce、独立生成并持久化答复。普通业务准入、来源证明、模型和负责人联系不由此授权。
+- Next action: 验证默认关闭、单件准入和稳定事件补传，再从固定提交安装；实际首发、处理、读确认单独记录。
+
+这是连通性适配，不是任意任务自动执行器。宿主只为获准的单件配置专用 key 和 grant；`probe-` key 仍无准入权。额外字段中的 nonce 为 16–128 位 ASCII 字母、数字、下划线或短横线，expires_at 为 UTC `Z` 时间。任务必须使用 v1 原有字段，最多另带原有 tracking；target 精确为 `{service:"transport-probe",operation:"sha256"}`，content 为 nonce，不能附带命令、模型指示或 coordinator_request。job/hash、收件者、回程和任务引用均按 grant 核对。
+
+原 collector 实际取得并核验原件后，协调员才能经签名 `verified_job` 读取它。协调员计算 UTF-8 nonce 的 SHA-256，先保存自己的处理记录和稳定结果，再调用原 `enqueue_result`。结果仅包含 `schema_version:1,type:"TRANSPORT_PROBE_RESULT",job_id,payload_hash,operation:"sha256",nonce_sha256,execution_enabled:false,business_accepted:false`，有 tracking 时沿原机制附带完全相同的 task_tracking。状态为 REPORTED_COMPLETED，仅指确定性探针完成。
+
+稳定报告事件为 `transport-probe-` 加规范化 `[job_id,payload_hash]` 的 SHA-256。同事件同内容回查或补传，不创建新版本；冲突拒绝。取消或到期后拒绝首次新增报告，已持久的原报告仍可查回、补传。移除单件 grant 不删除任务、结果、游标、OAuth 或历史处理记录。origin/origin_ref 在此模式下是宿主预授权的试验说明，不能冒充实际云端调用者或调度运行证明。
+
+沿原云端 Dot 已有检查计划预设这件请求，保存配置时不提交、不立即运行。自然运行先查原 job，仅明确 NOT_FOUND 才提交同一冻结包；超时或未知只按原 ID 对账。提交后按获准等待时间读取精确结果版本，核完整内容/hash 再写固定 ACK。首发和读取均由原 Dot 完成，Mac 不代 ACK。配置步骤与无人干预的运行分别留证，不把网页预投单、共享账号或计划刻点当作自然首发证据。

@@ -2,9 +2,11 @@
 
 import asyncio
 from contextlib import asynccontextmanager, suppress
+from datetime import datetime, timezone
 import hmac
 import json
 import os
+import re
 from pathlib import Path
 import secrets
 import socket
@@ -64,6 +66,16 @@ def unique_object(pairs):
     return result
 
 
+def transport_deadline(probe):
+    value = probe.get("expires_at")
+    check(isinstance(value, str) and re.fullmatch(
+        r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?Z", value), "UNAVAILABLE")
+    try:
+        return datetime.fromisoformat(value[:-1] + "+00:00")
+    except ValueError:
+        raise PortError("UNAVAILABLE") from None
+
+
 def load_policy(path):
     private_parent(path)
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -81,8 +93,15 @@ def load_policy(path):
           and len(set(keys.values())) == len(keys) and isinstance(grants, list) and len(grants) <= 256, "UNAVAILABLE")
     records = {}
     for g in grants:
-        check(isinstance(g, dict) and set(g) == {"key_id", "actions", "project_id", "coordinator_id", "recipient",
-              "report_route", "job_id", "payload_hash", "origin", "origin_ref", "task"}, "UNAVAILABLE")
+        required = {"key_id", "actions", "project_id", "coordinator_id", "recipient",
+                    "report_route", "job_id", "payload_hash", "origin", "origin_ref", "task"}
+        check(isinstance(g, dict) and set(g) in (required, required | {"transport_probe"}), "UNAVAILABLE")
+        if "transport_probe" in g:
+            probe = g["transport_probe"]
+            check(isinstance(probe, dict) and set(probe) == {"nonce", "expires_at"}
+                  and isinstance(probe["nonce"], str)
+                  and re.fullmatch(r"[A-Za-z0-9_-]{16,128}", probe["nonce"], re.ASCII), "UNAVAILABLE")
+            transport_deadline(probe)
         check(all(token(g[k]) for k in ("key_id", "project_id", "coordinator_id", "job_id"))
               and g["key_id"] in keys and not g["key_id"].startswith("probe-") and digest(g["payload_hash"])
               and isinstance(g["actions"], list) and bool(g["actions"]) and all(a in OPS for a in g["actions"])
@@ -106,6 +125,27 @@ def fits(job, g):
     if not isinstance(p, dict) or job.get("payload_hash") != g["payload_hash"] or job.get("job_id") != g["job_id"]:
         return False
     t, task, body = p.get("tracking"), g["task"], p.get("coordinator_request")
+    if "transport_probe" in g:
+        required = {"schema_version", "origin_task_id", "sender", "recipient", "report_route", "target", "content"}
+        if (set(p) not in (required, required | {"tracking"})
+                or type(p.get("schema_version")) is not int or p["schema_version"] != 1
+                or p.get("sender") != "cloud-dot" or p.get("recipient") != g["recipient"]
+                or p.get("report_route") != g["report_route"]
+                or p.get("target") != {"service": "transport-probe", "operation": "sha256"}
+                or p.get("content") != g["transport_probe"]["nonce"]):
+            return False
+        task_ref = task["task_ref"]
+        refs = {task_ref}
+        prefix = "https://github.com/" + task["repository"] + "/issues/"
+        if task_ref.startswith(prefix) and task_ref[len(prefix):].isdigit():
+            refs.add("github:" + task["repository"] + "#" + task_ref[len(prefix):])
+        if p.get("origin_task_id") not in refs:
+            return False
+        return ("tracking" not in p or (isinstance(t, dict)
+                and t.get("repository") == task["repository"] and t.get("project_url") == task["project_ref"]
+                and type(t.get("item_id")) is int and t["item_id"] == task["item_id"]
+                and ((t.get("issue_url") == task_ref and "draft_id" not in t)
+                     or (t.get("draft_id") == task_ref and "issue_url" not in t and task_ref.startswith("DI_")))))
     if not isinstance(t, dict) or not isinstance(body, dict):
         return False
     task_ref = task["task_ref"]
@@ -144,6 +184,9 @@ class CoordinatorPort:
     def capture_proof(self, job):
         try:
             g = self.config()[1].get(job.get("job_id"))
+            if g and "transport_probe" in g and (job.get("cancel_requested") is not False or
+                    datetime.now(timezone.utc) >= transport_deadline(g["transport_probe"])):
+                return None
             return proof_digest(g) if g and fits(job, g) else None
         except (ValueError, OSError, KeyError, TypeError, RecursionError):
             return None  # A broken/revoked local grant never authorizes retaining a body.
@@ -194,6 +237,8 @@ class CoordinatorPort:
         check(token(frame["job_id"]))
         g = grants.get(frame["job_id"])
         check(g and g["key_id"] == key_id and op in g["actions"], "ACCESS_DENIED")
+        if op == "verified_job" and "transport_probe" in g:
+            check(datetime.now(timezone.utc) < transport_deadline(g["transport_probe"]), "ACCESS_DENIED")
         record = self.store.coordinator_record(g["job_id"], proof_digest(g))
         if record is None:
             if op == "verified_job":
@@ -203,9 +248,14 @@ class CoordinatorPort:
             raise PortError("UNAVAILABLE")
         check(fits(record, g) and _hash(_json(record["payload"])) == g["payload_hash"], "CONFLICT")
         if op == "verified_job":
+            if "transport_probe" in g:
+                check(record.get("cancel_requested") is False, "ACCESS_DENIED")
             return {k: g[k] for k in ("origin", "origin_ref", "job_id", "payload_hash", "task")} | {"record": record}
         event_id = frame["event_id"]
-        check(token(event_id) and event_id.startswith("coordinate-") and digest(event_id[11:]))
+        if "transport_probe" in g:
+            check(event_id == "transport-probe-" + _hash(_json([g["job_id"], g["payload_hash"]])))
+        else:
+            check(token(event_id) and event_id.startswith("coordinate-") and digest(event_id[11:]))
         if op == "lookup_report":
             report = self.store.coordinator_report(g["job_id"], event_id)
             if report is None:
@@ -213,6 +263,9 @@ class CoordinatorPort:
         else:
             check(frame["project_id"] == g["project_id"] and frame["payload_hash"] == g["payload_hash"], "ACCESS_DENIED")
             self.check_result(frame["result"], g, record, event_id, frame["status"])
+            if "transport_probe" in g and self.store.coordinator_report(g["job_id"], event_id) is None:
+                check(record.get("cancel_requested") is False and
+                      datetime.now(timezone.utc) < transport_deadline(g["transport_probe"]), "ACCESS_DENIED")
             try:
                 report = self.store.queue_report(g["job_id"], event_id, frame["status"], frame["result"])
             except ValueError as error:
@@ -226,6 +279,18 @@ class CoordinatorPort:
     @staticmethod
     def check_result(wire, grant, record, event_id, status):
         p = record["payload"]
+        if "transport_probe" in grant:
+            expected = {"schema_version": 1, "type": "TRANSPORT_PROBE_RESULT", "job_id": grant["job_id"],
+                        "payload_hash": grant["payload_hash"], "operation": "sha256",
+                        "nonce_sha256": _hash(grant["transport_probe"]["nonce"]),
+                        "execution_enabled": False, "business_accepted": False}
+            if "tracking" in p:
+                expected["task_tracking"] = p["tracking"]
+            check(status == "REPORTED_COMPLETED" and isinstance(wire, dict)
+                  and type(wire.get("schema_version")) is int and wire.get("execution_enabled") is False
+                  and wire.get("business_accepted") is False and wire == expected, "CONFLICT")
+            _json(wire)
+            return
         req = p["coordinator_request"]["request_id"]
         bind = {"project_id": grant["project_id"], "request_id": req, "job_id": grant["job_id"],
                 "payload_hash": grant["payload_hash"]}
