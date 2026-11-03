@@ -198,7 +198,7 @@ systemd 模板的 `MemoryHigh=192M`、`MemoryMax=256M`、`CPUQuota=50%`、`Tasks
 | 仓库 | 本轮固定版本 | 维护／发布事实 |
 | --- | --- | --- |
 | `CF-FE/task-mailbox-mcp` | HELD 增量 `8fd78b8d1b76a917d9ce91fb0d4257f45b0560d9`；完整修复源码 `87cfb6551240c08d5aa8df3a8afdc305c5388a86` | 已推送本仓；VPS 信箱与 Mac 桥唯一维护位置。本页文档提交由 Git 历史和原 Issue 记录，不与运行源码版本混同 |
-| `CF-FE/herdr-4-codexcloud` | 本地 `1d26558b4b27dc5541122cc885edd76847671da4` | 9 份采用／状态文档对齐；Worker 已在原本地 `f9b1209` 提交。本次独立读取远端 main 为 `2d812e96486579e71443d32f1c46d81a0b5fd749`，本轮未推送，不能将 Worker 或新文档记为已发布 |
+| `CF-FE/herdr-4-codexcloud` | 本地 `c2d88bdb12d3ff9638e00c433f7b0f457d5c7593` | 9 份采用／状态文档对齐；Worker 已在原本地 `f9b1209` 提交。本次独立读取远端 main 为 `2d812e96486579e71443d32f1c46d81a0b5fd749`，本轮未推送，不能将 Worker 或新文档记为已发布 |
 | `CF-FE/mymcp-4-codexcloud` | 本地 `f864c5f17d11f543ead1ef2d9cd366ea87c8828a` | 首页新路线和角色接收导航两文档更新；旧 Lody 任务和写权未宣称全部退出。本轮未推送，已核远端 main 仍为 `02e6ca4` |
 | 个人 `create-network-sh` | 本地 `a45cdc404cabfe2e4f580c681aef2efe928f8e10` | 只改 4 份历史标记／导航；服务源码与 import-manifest 未变、不自动同步。本轮未推送，已核远端 main 仍为 `9d36feb` |
 
@@ -234,7 +234,7 @@ Herdr 的 `README`／`docs/status.md`／`architecture.md`／`pilot.md` 与 5 个
 | Herdr 三项规定检查 | 主执行侧直接通过 `worker_library.py check`（7 Worker／9 backend／13 role／11 专业候选）、`check_repository.py`（mcp0/skill2/plugin0）、27 项 unittest。后续只有 README／status 采用文字补录，代码树未变 |
 | mymcp | 主执行侧结构检查通过（mcp1/skill4/plugin1）；仅两 Markdown 改动，未重跑无关全套行为。239 PASS／1 Linux skip 限复用原 review 会话在未变代码基线 `02e6ca4` 的结果，不冒充本次重跑 |
 | 文档、来源与增量 | 子执行侧完成三仓 15 Markdown 的引用核对；验收侧独立报告 268 个本地链接／72 锚点通过。主执行侧核源码／清单未跨仓变更，legacy import-manifest 字节保留，最终 diff --check 通过 |
-| 独立模拟与代码增量 | 原 review 主线程直接报告：初始独立 9 项由 5PASS/4FAIL 转为 9PASS；新增生产 worker 路径 2PASS；HELD 9PASS。collector SHA256 `f62f01502d1eeaebeac8e3ee6444381802ef95e525d0637ef8c9ae87a8ee1a85` 以及 HELD 已验文件摘要均与固定修复提交一致，增量代码审查通过；不等同整体业务验收 |
+| 独立模拟与代码增量 | 原 review 主线程直接执行：初始独立 9 项由 5PASS/4FAIL 转为 9PASS，新增生产 worker 路径 2PASS；HELD 9PASS 由其子审查实际执行，主线程绑定文件摘要回读该增量。collector SHA256 `f62f01502d1eeaebeac8e3ee6444381802ef95e525d0637ef8c9ae87a8ee1a85` 以及 HELD 已验文件摘要均与固定修复提交一致，增量代码审查通过；不等同整体业务验收 |
 
 验收侧在 135 项中观察到 2 条既有测试夹具 SQLite ResourceWarning，已定位 `tests/test_bridge_store.py` 的 with-connection 夹具未显式 close；该文件本轮未改。无测试失败，作为已知非阻断警告保留，本轮不扩展修复，也不因警告重复运行全部测试。
 
@@ -246,4 +246,4 @@ Herdr 的 `README`／`docs/status.md`／`architecture.md`／`pilot.md` 与 5 个
 
 完整机器级凭据与摘要保存在私密 `install-receipt.json` 及 `state/evidence/bridge-reliability-update-20261103/`；其中原文件、配置和旧源码仅作回退材料。公开仓库不包含私密端点／会话ID、令牌、台账正文或原始现场日志。VPS 本轮没有部署或重验，原部署快照仍沿记录 `a06dc70`；Mac 改版不冒称 VPS 换版。
 
-**作者实施／自检与分阶段独立核验已完成；最终统一报告待原 review 会话回读后作最终验收。** 原 Issue 保持 Open。长期稳定性、Mac 发起反向新任务、具体 Cloud／CLI 的独立认证与读写、Herdr／模型业务承接及负责人业务验收仍分别未验；自动执行 handler 与 Dot 自动唤醒未实现。本轮未新增生产 job、模型／Herdr 派发、现场故障注入、自动登录／重注册、TLS／代理／端点变更或新的 CI／调度平台。
+**原 review 会话已回读统一交接内容，并明确给出本轮工程范围最终验收：通过。** 回执绑定修复源码 `87cfb655`、已回读交接报告 `d882e6f828a3569656077e39f66463f7ef170b11` 及当前 Mac 运行副本；当前提交只合入该回执和最终文档版本。范围限三仓本地维护归属／状态对齐、三缺陷修复及当前 Mac 更新，不包含三仓尚未推送的发布。135 标准库、9 SDK smoke、Herdr 27 为验收主线程直接复跑；独立 20 项中 HELD 9 由子审查实际执行，其余 11 由验收主线程执行，代码及安装／原生进程／只读台账由主线程另核。作者自检没有替代这些验收。原 Issue 保持 Open。长期稳定性、Mac 发起反向新任务、具体 Cloud／CLI 的独立认证与读写、Herdr／模型业务承接及负责人业务验收仍分别未验；自动执行 handler 与 Dot 自动唤醒未实现。本轮未新增生产 job、模型／Herdr 派发、现场故障注入、自动登录／重注册、TLS／代理／端点变更或新的 CI／调度平台。
