@@ -276,3 +276,5 @@ VPS 由本实施会话的子执行者直接经原 SSH 入口只读核对：原 s
 Worker／角色库共 22 文件、111,320 字节，仅标准库离线选型／准备，主要由 Dot／Mac Lead 消费；准备稿已携带所选角色及合同正文／摘要。Win／Cloud 无须默认安装全库，具体任务按获准入口取得选中固定输入并核读取即可。若以后要求独立整库消费，再明确接收目录及采用回执；本轮未批量分发、启动 Worker 或创建 Cloud 任务。Mac 官方 Herdr skill 与库是不同对象，既有副本摘要相符，无需重装。
 
 公子另已授权 Herdr 项目协调层确定性执行适配器开发，正式任务归 [Herdr #1](https://github.com/CF-FE/herdr-4-codexcloud/issues/1)，规范及后续执行事实由该仓维护；本 Issue 继续承载传输组件与原关联，VPS 九工具、Mac 桥及 hook 不因此取得执行权。本节的发布／差异复核不是新增适配器、模型回合或业务验收的完成回执。
+
+Herdr 后续限定试点已由其实施主线程完成一次真实执行／产物核验，详见 [Herdr 执行适配器规范](https://github.com/CF-FE/herdr-4-codexcloud/blob/main/docs/herdr-executor.md)；本服务没有新增执行工具或更换运行源码。该结果已用 Lead 自己的真实 Codex session／turn `bind` 和 `stage-report`，状态仍为 `WAITING_FOR_BOUND_SESSION_STOP`，没有伪造 Stop、直接发布或第二 collector，出件与读取 ACK 仍待取证。主执行侧另直接读到最后成功 2026-11-03T02:12:30Z、02:16:30Z collector=`NETWORK_FAILED / UNKNOWN_CAUSE stage:CLIENT_OPEN type:RuntimeError`；当前原因 UNKNOWN，沿原退避，不据此认定认证失效、重登录或业务失败。原任务保持 Open，等待自然 Stop 后按稳定 event／hash 对账。
