@@ -8,7 +8,7 @@
 
 本轮从个人整合仓固定来源 `9d36feb436264f2c0a065be7e644043a930a98dd` 接回 47 个服务文件，排除个人整合记录 `INTEGRATION.md`／`import-manifest.json`；复制时来源 hash 一致，逐文件基线见 [source-updates.json](source-updates.json)。本页随后进行归属与权限更正，来源记录保留复制时字节。本次接收已提交为 `652406bf09ed589285942293129215d35363a19e`，组织规则增量为 `3add47a`，均已推送本仓；个人整合仓只保留历史部署副本。
 
-当前 Mac 实际安装固定为本仓 `4a11219462bf101569605e5dfe676f39ba38e219`，11 个运行文件摘要回读一致；登录自启、原生 launchd running 和新的 collector=OK 成功时点已回读。观察范围仍为 Herdr／信箱两个项目，信箱路径已切到本 CF-FE 工作区，原数据验证临时绑定已归档解除，数据库／旧 job／hash／事件／结果／专用 OAuth 未变。VPS 运行代码快照仍为原部署 `a06dc70e7994df7cb3c92a30cfde4276c26a5759`，本轮未重启或替换 VPS 服务。旧 Mac `6386d7f` 及来源 `9d36feb` 作为历史快照保留，不冒称当前来源；除特别标明，现场证据由主执行侧直接取得。
+当前 Mac 实际安装固定为本仓 `9d556e052e4efd29ad3dafbaf72834b1707c1591`，11 个运行文件摘要回读一致；登录自启、原生 launchd running 和新的 collector=OK 成功时点已回读。观察范围仍为 Herdr／信箱两个项目，信箱路径已切到本 CF-FE 工作区，原数据验证临时绑定已归档解除，原 job／hash／事件／结果与专用 OAuth 身份保留，迁移中的路径元数据适配见下文。VPS 运行代码快照仍为原部署 `a06dc70e7994df7cb3c92a30cfde4276c26a5759`，本轮未重启或替换 VPS 服务。旧 Mac `6386d7f` 及来源 `9d36feb` 作为历史快照保留，不冒称当前来源；除特别标明，现场证据由主执行侧直接取得。
 
 | 层次 | 状态 | 已有证据与范围 |
 | --- | --- | --- |
@@ -30,7 +30,7 @@
 | Mac Kimi OAuth／工具发现 | NOT_RUN | 未启动 Kimi 新会话、登录或发现 |
 | 原 nonce 结果交付与 Dot 读取 | PASS | Mac 桥收件／原事件上传 v1，当前桌面会话经云端 App 读全核摘要／nonce 并 ACK；公子另报告指定 Dot 已读取并确认，主执行侧实际回读该精确 job／版本／hash 的独立稳定 ACK 事件。Dot 行为归用户回报，事件持久记录为主执行侧直接取证；Mac 随后实际收取该 ACK，原游标推进且待处理／回传均为 0 |
 | 双向 nonce 全覆盖 | PARTIAL | 上述原任务链路已通过；原任务由桌面会话经云端 App 提交，不能冒称 Dot 发起。Mac 新建任务、Dot 回报的反方向尚未执行 |
-| Mac 本地实现与本仓复测 | PASS | 本仓完整 104 项测试已由主执行侧在既有独立 Mac 环境复跑通过：原 Store 17、台账 20、collector 17、hook 10、CLI／安装 6、浏览器交接／日志 4、引用校验 21、关联综合 9 |
+| Mac 本地实现与本仓复测 | PASS | 本仓完整 106 项测试已由主执行侧在既有独立 Mac 环境复跑通过：原 Store 17、台账 20、collector 17、hook 10、CLI／安装 8、浏览器交接／日志 4、引用校验 21、关联综合 9 |
 | Mac 桥独立安装 | PASS | 独立源码副本、摘要回读、0700 运行目录、0600 配置／钩子定义、实际 SQLite 状态回读及 plist lint；没有启动模型／Herdr／业务 handler |
 | Mac 桥依赖与加密客户端初始化 | PASS | Python 3.13.1 x86_64，FastMCP 4.0.11、MCP 2.3.0、cryptography 48.0.1，共 66 依赖；临时目录中实际构造客户端、私密权限与缺缓存拒绝测试通过，无外部请求 |
 | Codex App 原生钩子触发（已观察四类） | PASS | 公子已审阅并信任已安装定义；主执行侧直接回读本地 live 台账，session 与本对话对应，观察到 SessionStart／PreToolUse／PostToolUse／UserPromptSubmit。只覆盖实际观察的四类，不推定其余三类或 CLI 模型回合已触发 |
@@ -175,3 +175,16 @@ systemd 模板的 `MemoryHigh=192M`、`MemoryMax=256M`、`CPUQuota=50%`、`Tasks
 公子指出本地安装名与云端插件容易混淆，本地组件统一改称 **Mac 协调桥（Mac Coordination Bridge）**；VPS 信箱及 MCP 插件仍称 **Task Mailbox**。源码、文档、CLI／授权引导和 hook 台账提示已同步，104 项本地回归通过。固定实现提交为 `4a11219462bf101569605e5dfe676f39ba38e219`，已复制到本机并核对全部 11 个运行文件摘要；真实 CLI `--help` 已读回新名称。
 
 既有安装目录、launchd 标识、钩子定义和专用 OAuth 保留，配置／钩子／plist 的改名前后摘要一致；钩子标签还用于定义去重，未为改名重新生成定义或要求信任。后台 collector 未因纯命名更新重启；当前进程加载的历史名称和既有 OAuth 注册元数据可继续显示旧称，新客户端名用于未来注册。此项验证只证明命名与安装文件，不扩展长期稳定性或业务验收结论。
+
+## 安装路径迁移（2026-11-03，Asia/Shanghai）
+
+状态：**PASS，目录与后台切换完成，新钩子已由公子确认信任且真实触发。** 本次只迁移本地桥，不改 VPS、云端 App、信箱端点、source_id、consumer_id 或 Herdr／信箱两个项目的感知范围。
+
+- 当前运行目录为 `~/Library/Application Support/MacCoordinationBridge`；默认配置、七类 hook 命令、启动参数、工作目录及日志路径均已适配。旧 `TaskMailbox` 目录不存在，不保留兼容软链接；旧启动项已卸载并移到私密回退材料中，没有第二个收件器。
+- 运行源码固定为本仓 `9d556e052e4efd29ad3dafbaf72834b1707c1591`，11 个运行文件摘要与该提交一致；106 项标准库回归通过。新的独立 Python 3.13.1 环境按同一锁定文件重建，66 个依赖版本与旧环境一致，`pip check` 和关键模块导入通过。本机原包镜像超时后，公子明确批准仅本次使用官方 PyPI；仅子进程覆盖下载配置，全局 pip 配置未改。
+- 切换前暂停本桥 hooks、停止旧 collector 并等满 3 秒钩子超时窗口，再核对无数据库持有者。整体移动原状态目录；SQLite 完整性、切换前后数据库文件摘要及所有表快照一致，draft 保留。启用后原 jobs／inbox／reports 仍与切换前快照一致，游标为 7，待收事件及待补传报告为 0。随后新增的 hooks／sessions 及 health 属真实运行记录，未重写历史正文、payload hash、结果或读 ACK。
+- OAuth 的密钥及 4 个加密值文件在切换前后字节一致；4 份 FileTree 集合元数据只将 `directory` 从旧缓存路径映射到新缓存，其余字段不变。新目录中禁止交互登录的客户端离线初始化通过；后台继续使用原专用缓存，无重新注册或交互登录。启用后的直接快照还确认 9 个 OAuth 文件与启用前摘要一致；这不是长期不刷新令牌的承诺。
+- 新启动项为 `io.maccoordinationbridge.coordinator.plist`，`RunAtLoad=true`、`KeepAlive=false`。主执行侧直接回读 launchd running、启动后的新 collector=OK／成功时点和原游标；启动时间为本地 07:58，后续成功收件在该时点之后。原认证失败停分支及网络退避规则不变，短时成功不代替长期稳定性。
+- hook 标签为 `Mac Coordination Bridge local coordination`。公子已确认信任，主执行侧以迁移前私密 SQLite 快照为界，直接回读当前会话新增 PreToolUse／PostToolUse；仅记录本次实际已见的事件，未把配置或手动脚本调用当作原生触发。其他原生事件与 CLI 模型 turn 仍分别留待取证。
+
+配置／旧环境／旧源码／旧 plist 及迁移对账摘要保存在新运行目录下的私密 `state/evidence/runtime-path-migration-20261103/`。它们是回退材料，不是另一个活动安装；原台账与 OAuth 只沿新路径继续。公开仓库只保留方法、固定提交和汇总结论，不提交私密配置、凭据、完整路径清单或原始现场输出。
