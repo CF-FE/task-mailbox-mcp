@@ -309,4 +309,4 @@ Herdr 后续限定试点已由其实施主线程完成一次真实执行／产�
 
 本轮结论：限定一件的只读后台投递、协调员自动答复、结果回传和原Dot读确认闭环通过，临时准入已撤。单件合同和到期/补传边界见 [SPEC](../SPEC.md#原计划的单件连通性任务)，协调员源码及独立处理记录归 [Herdr仓](https://github.com/CF-FE/herdr-4-codexcloud/blob/main/docs/project-coordinator.md)维护。任务包与结果在运行时通过信箱自动交接；公子在首发前另转发过沿原计划及5分钟回读的说明，Dot当时查到NOT_FOUND并表示等原计划，该说明不是实际任务投递或结果转交。原计划设置及事后只读验收用到原生页面，与运行触发分记。按公子要求不再验调度准点性，未取得的独立调度器run_id不补造。
 
-VPS、MCP Events均未更新，原台账及OAuth保留。直接合入main曾被自动审批以未明确授权绕过PR且当时实测未完成拒绝；公子随后明确批准合并[PR #3](https://github.com/CF-FE/task-mailbox-mcp/pull/3)，原主协调已于23:41:52按该授权完成合并，GitHub独立回读合并提交为 `eded44119fd19e5fb70342e504c4b3cd7cf66e00`。原主协调另核Mac的13份运行文件与实测提交及合并树一致，仍为实测时原进程，无需重新部署或新增测试单。这次只读样本不代表24小时稳定性、通用项目自动派发或业务验收；本Issue仍因长期稳定性待办保持开放。
+VPS、MCP Events均未更新，原台账及OAuth保留。[PR #3](https://github.com/CF-FE/task-mailbox-mcp/pull/3) 已合并到 `main`，合并时间为北京时间 23:41:52，合并提交为 [`eded441`](https://github.com/CF-FE/task-mailbox-mcp/commit/eded44119fd19e5fb70342e504c4b3cd7cf66e00)。原主协调另核Mac的13份运行文件与实测提交及合并树一致，仍为实测时原进程，无需重新部署或新增测试单。这次只读样本不代表24小时稳定性、通用项目自动派发或业务验收；本Issue仍因长期稳定性待办保持开放。
