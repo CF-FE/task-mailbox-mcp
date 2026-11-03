@@ -9,7 +9,7 @@
                                                         主动读取、按原授权承接
 ```
 
-VPS 服务只收发和保存数据。本仓新增 [Mac 协调桥](mac/README.md)，主动拉取事件、保存本机台账、感知配置范围内的 Codex 会话并补传显式结果。桥不自动执行任务，不增加 AI 层，不保证唤醒 Dot；Mac 的 Herdr 控制与项目执行沿既有入口；[Herdr仓Lead显式执行适配器](https://github.com/CF-FE/herdr-4-codexcloud/blob/main/docs/herdr-executor.md)已取得一次Mac合成执行／回传的限定工程验收，自动消费／无人值守派发及Win／Cloud扩展仍未实现或未验。提交、结果报告、读取确认和生产业务验收分别留证。
+VPS 服务只收发和保存数据。本仓新增 [Mac 协调桥](mac/README.md)，主动拉取事件、保存本机台账、感知配置范围内的 Codex 会话并补传显式结果。桥不自动执行任务，不增加 AI 层；默认仅拉取，[可选 MCP Events](docs/events.md)可在获准启用后把精确任务的结果通知原 Dot 订阅对话；Mac 的 Herdr 控制与项目执行沿既有入口；[Herdr仓Lead显式执行适配器](https://github.com/CF-FE/herdr-4-codexcloud/blob/main/docs/herdr-executor.md)已取得一次Mac合成执行／回传的限定工程验收，自动消费／无人值守派发及Win／Cloud扩展仍未实现或未验。提交、结果报告、读取确认和生产业务验收分别留证。
 
 后续项目协作的统一查看、派发前核读、原仓库资产归属、Iteration 和结果关联，见[Projects 关联契约](docs/projects.md)。正式状态沿原 Projects／任务正文维护；信箱保留固定引用。
 
@@ -78,3 +78,7 @@ VPS 进程与 HTTPS 已实测。初次独立包被界面标记为“仅限桌面
 本仓库公开。只提交源码、依赖声明、文档及占位配置；令牌、私钥、OAuth 密钥／状态、数据库、真实连接配置和原始宿主输出保存在各自受限运行目录。
 
 本轮将已验证的 Mac 适配、Projects 关联和当前文档按固定提交完整交接回本仓；初始 `7d162860c10ac2d72719522be7fe01478f4747a3` 保留为历史基线。逐文件来源、排除项与本地适配摘要见 [docs/source-updates.json](docs/source-updates.json)，不建立自动同步或共享运行目录。
+
+## 可选结果事件
+
+[精确任务的 MCP Events](docs/events.md)已实现并通过隔离验证，默认关闭。真实原 Dot 注册、平台回调出站及 VPS 启用仍单独核准和验收，不以通知送达代替结果读取。开发任务为 [#2](https://github.com/CF-FE/task-mailbox-mcp/issues/2)。

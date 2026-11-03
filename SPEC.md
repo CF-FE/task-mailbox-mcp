@@ -94,3 +94,7 @@ ARCHITECTURE TRIAGE
 - 拒绝码为 `ACCESS_DENIED`、`INVALID_REQUEST`、`CONFLICT` 和 `UNAVAILABLE`。未知结果、超时和丢确认只按原 job/event 查，不能由客户端换事件重发。仅读和排队按动作各自授权。
 
 **部署与恢复。** 安装规则及签名探针步骤见 [本机操作说明](mac/README.md#协调员本地签名探针)。未取得现任负责人、当前云端Dot和项目项的独立证明之前，只能验收已安装服务的探针及隔离数据。端口不提供身份登记、填充任命、远程开通、自动写 Projects 或代理业务 ACK 的操作。
+
+## 可选 MCP Events v1
+
+默认关闭的同端点事件能力、三种方法、精确项目/job/hash授权、签名回调、持久有界补传及撤回合同统一见 [events.md](docs/events.md)。原九工具、OAuth、Mac collector及结果/ACK语义不变。没有显式私有策略时不声明或投递事件。

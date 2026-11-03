@@ -30,10 +30,14 @@ class AccountGuard(Middleware):
         return await call_next(context)
 
 
-def create_server(store, auth, allowed_login):
+def create_server(store, auth, allowed_login, event_service=None):
     """Auth is explicit; production configuration never permits auth=None."""
     if auth is None or not isinstance(allowed_login, str) or not allowed_login.strip():
         raise ValueError("authentication and an allowed GitHub account are required")
+    lifespan = None
+    if event_service is not None:
+        from event_service import event_lifespan
+        lifespan = event_lifespan(event_service)
     server = FastMCP(
         "Task Mailbox",
         instructions=(
@@ -42,9 +46,13 @@ def create_server(store, auth, allowed_login):
             "completion, cancellation requests, and read ACKs are not business acceptance."
         ),
         auth=auth,
+        lifespan=lifespan,
         mask_error_details=True,
     )
     server.add_middleware(AccountGuard(allowed_login))
+    if event_service is not None:
+        from event_protocol import install_events
+        install_events(server, event_service, allowed_login)
 
     def invoke(operation, *args):
         try:
@@ -189,7 +197,18 @@ def configured_app():
                   max_payload_bytes=int(os.environ.get("TASK_MAILBOX_MAX_PAYLOAD_BYTES", "1048576")),
                   max_database_bytes=int(os.environ.get("TASK_MAILBOX_MAX_DATABASE_BYTES", "268435456")),
                   max_jobs=int(os.environ.get("TASK_MAILBOX_MAX_JOBS", "10000")))
-    server = create_server(store, auth, values["TASK_MAILBOX_ALLOWED_GITHUB_USER"])
+    event_service = None
+    policy_file = os.environ.get("TASK_MAILBOX_EVENTS_POLICY_FILE")
+    if policy_file:
+        from cryptography.fernet import Fernet
+        from fastmcp.server.auth.jwt_issuer import derive_jwt_key
+        from event_service import EventService, load_policy
+        from event_store import EventStore
+        load_policy(policy_file)  # Explicit safe configuration required before serving.
+        cipher = Fernet(derive_jwt_key(high_entropy_material=signing_key,
+                                     salt="task-mailbox-events-storage-v1"))
+        event_service = EventService(EventStore(store, cipher), store, lambda: load_policy(policy_file))
+    server = create_server(store, auth, values["TASK_MAILBOX_ALLOWED_GITHUB_USER"], event_service)
     return PublicPrefix(server.http_app(path="/mcp", stateless_http=True,
                                          json_response=True), parsed.path)
 

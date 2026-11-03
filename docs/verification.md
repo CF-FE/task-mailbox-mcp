@@ -291,3 +291,7 @@ Herdr 后续限定试点已由其实施主线程完成一次真实执行／产�
 | 正式 Mac 签名探针 | PASS | 北京时间 18:08:42.833，正式安装的协调员 `418b5a2` 对原桥 `b6dc6b6` 完成签名往返，回读 `PORT_VERIFIED / LOCAL_BRIDGE_PORT / protocol=1`。监听为 `READY`，原 collector 进程为 `RUNNING`，配置及 socket 权限均为 0600。业务 grants 为 0，一次手动 pump 返回 `NO_PILOT`。[探针与轮换步骤](../mac/README.md#协调员本地签名探针) |
 | 原 collector 远端轮询 | PASS（单次回合） | 启用探针前，北京时间 18:06:30 回读 `NETWORK_FAILED / CLIENT_OPEN`，具体原因仍为 `UNKNOWN`。重载后，18:10:04.801 回读 `OK / ROUND_COMPLETE`。原桥已有报告 3 份，待补传 0，按生产授权捕获的原件为 0。 |
 | 云端 Dot 真实联络 | NOT_RUN | 本次生产协调台账的项目、请求、联系和结果计数均为 0。本轮真实业务请求与负责人答复均为 0，尚无云端 Dot 对本次请求的原生读取回执。 |
+
+## 可选 MCP Events 开发交付（2026-11-03）
+
+服务侧新增默认关闭的精确任务结果事件。181项标准库回归、14项加密生命周期、两协议真实SDK回环、实际服务lifespan自动投递的隔离HTTP读/ACK样本，以及原MCP/OAuth smoke均通过。原生Dot订阅、平台公网回调、VPS部署和长稳仍为NOT_RUN；本轮未改原collector、认证、端点或启用公网出站。合同、固定部署集合与撤回步骤统一见[events.md](events.md)，任务沿[#2](https://github.com/CF-FE/task-mailbox-mcp/issues/2)。直接业务联络与原Dot最终验收沿Herdr原任务取证，不互相代证。
