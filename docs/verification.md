@@ -195,6 +195,8 @@ systemd 模板的 `MemoryHigh=192M`、`MemoryMax=256M`、`CPUQuota=50%`、`Tasks
 
 ### 固定版本与维护边界
 
+下表保留原工程验收时的发布快照；公子后续授权的三仓发布及部署差异复核见本节末尾，不以旧快照覆盖后续实际远端。
+
 | 仓库 | 本轮固定版本 | 维护／发布事实 |
 | --- | --- | --- |
 | `CF-FE/task-mailbox-mcp` | HELD 增量 `8fd78b8d1b76a917d9ce91fb0d4257f45b0560d9`；完整修复源码 `87cfb6551240c08d5aa8df3a8afdc305c5388a86` | 已推送本仓；VPS 信箱与 Mac 桥唯一维护位置。本页文档提交由 Git 历史和原 Issue 记录，不与运行源码版本混同 |
@@ -247,3 +249,30 @@ Herdr 的 `README`／`docs/status.md`／`architecture.md`／`pilot.md` 与 5 个
 完整机器级凭据与摘要保存在私密 `install-receipt.json` 及 `state/evidence/bridge-reliability-update-20261103/`；其中原文件、配置和旧源码仅作回退材料。公开仓库不包含私密端点／会话ID、令牌、台账正文或原始现场日志。VPS 本轮没有部署或重验，原部署快照仍沿记录 `a06dc70`；Mac 改版不冒称 VPS 换版。
 
 **原 review 会话已回读统一交接内容，并明确给出本轮工程范围最终验收：通过。** 回执绑定修复源码 `87cfb655`、已回读交接报告 `d882e6f828a3569656077e39f66463f7ef170b11` 及当前 Mac 运行副本；当前提交只合入该回执和最终文档版本。范围限三仓本地维护归属／状态对齐、三缺陷修复及当前 Mac 更新，不包含三仓尚未推送的发布。135 标准库、9 SDK smoke、Herdr 27 为验收主线程直接复跑；独立 20 项中 HELD 9 由子审查实际执行，其余 11 由验收主线程执行，代码及安装／原生进程／只读台账由主线程另核。作者自检没有替代这些验收。原 Issue 保持 Open。长期稳定性、Mac 发起反向新任务、具体 Cloud／CLI 的独立认证与读写、Herdr／模型业务承接及负责人业务验收仍分别未验；自动执行 handler 与 Dot 自动唤醒未实现。本轮未新增生产 job、模型／Herdr 派发、现场故障注入、自动登录／重注册、TLS／代理／端点变更或新的 CI／调度平台。
+
+### 后续授权的发布与部署差异复核
+
+2026-11-03，公子在原 review 会话追加“都推送，然后部署”。原 review 会话负责三次 fast-forward 推送，本实施主线程又分别直接 `git ls-remote origin refs/heads/main` 核对：
+
+| 仓库 | 已发布 main | 本次部署处理 |
+| --- | --- | --- |
+| `CF-FE/herdr-4-codexcloud` | `c2d88bdb12d3ff9638e00c433f7b0f457d5c7593` | 已含 Worker／角色库及采用文档；Mac checkout 已完整持有离线闭包，无额外服务安装 |
+| `CF-FE/mymcp-4-codexcloud` | `f864c5f17d11f543ead1ef2d9cd366ea87c8828a` | 两份导航文档；不替换在途 Lody 配置 |
+| 历史个人整合仓 | `a45cdc404cabfe2e4f580c681aef2efe928f8e10` | 只发布历史标记；不从此部署信箱或同步源码 |
+
+Mac 主执行侧直接回读安装源仍为 `87cfb655`，11 文件同时匹配 receipt／Git；`87cfb655..797afbcb` 的运行文件及部署目录无差异。新 launchd running、仅一个 collector 持锁；本次观察到 2026-11-03T01:29:12Z 的 collector OK 和随后真实 PreToolUse／PostToolUse。故本轮无需再次安装、重启、授权或重建环境；旧目录／旧启动项仍不存在。
+
+VPS 由本实施会话的子执行者直接经原 SSH 入口只读核对：原 systemd 单元 active/running，实际进程和工作目录仍指向原独立应用。主执行侧复核其脱敏 inventory 与本地固定对象；没有冒称本主线程再次 SSH。磁盘三源码及原生单元的摘要与当前维护版本、Mac 固定源、初始基线和历史部署整合树均一致：
+
+| 文件 | SHA-256 |
+| --- | --- |
+| `server.py` | `cc4a825fc732aa8adfddcea85f8297b08de06733d1ef0dc3a3b7ab8a8d66c2b4` |
+| `mailbox_store.py` | `2a18b9a57b12df0def29bcb121f2cc619b57b930eabd9d52818bf483ab4e86ed` |
+| `oauth_storage.py` | `868de43dd455ab610685c2c620af8086ce3f54df73327a6b721add3a648e79f5` |
+| `deployment/task-mailbox.service` | `34bc93282bd83c5fa10658f99f0b46309c9d1645dfe53b1c974fee75360ea733` |
+
+本次**无需 VPS 部署变更或重启**。原 receipt 的 `source_commit=7d162860` 与 `commit=a06dc70` 分别解析为本仓初始基线和历史整合树，保留原字段，不把“文件相同”改写为当前 HEAD 已安装。脱敏 inventory 记录于 2026-11-03T01:34:41Z；首次成功只读未采远端精确时刻，之后补采请求超时并已停止，精确远端观察时刻为 UNKNOWN。该证据只覆盖磁盘文件和原生进程路径，不覆盖 Python 内存字节、新 OAuth／MCP／端到端或长期验收。未改环境文件、路由、依赖或 Gitee 服务。
+
+Worker／角色库共 22 文件、111,320 字节，仅标准库离线选型／准备，主要由 Dot／Mac Lead 消费；准备稿已携带所选角色及合同正文／摘要。Win／Cloud 无须默认安装全库，具体任务按获准入口取得选中固定输入并核读取即可。若以后要求独立整库消费，再明确接收目录及采用回执；本轮未批量分发、启动 Worker 或创建 Cloud 任务。Mac 官方 Herdr skill 与库是不同对象，既有副本摘要相符，无需重装。
+
+公子另已授权 Herdr 项目协调层确定性执行适配器开发，正式任务归 [Herdr #1](https://github.com/CF-FE/herdr-4-codexcloud/issues/1)，规范及后续执行事实由该仓维护；本 Issue 继续承载传输组件与原关联，VPS 九工具、Mac 桥及 hook 不因此取得执行权。本节的发布／差异复核不是新增适配器、模型回合或业务验收的完成回执。
