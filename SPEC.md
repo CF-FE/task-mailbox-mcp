@@ -90,10 +90,24 @@ ARCHITECTURE TRIAGE
 - 配置结构为 `{v:1,socket_path,keys,grants}`。keys 映射本机 key ID 到 32 字节随机密钥的 64 位小写十六进制。grant 精确包含 `key_id,actions,project_id,coordinator_id,recipient,report_route,job_id,payload_hash,origin,origin_ref,task`。同一 job 只有一份绑定，凭据和实际路由留在宿主。origin 字段为 `channel,subject`，task 为 `repository,project_ref,item_id,task_ref,evidence_ref`。actions 只允许显式勾选下述三个业务操作。以 `probe-` 开头的 key 只可探测，写入此类 key 的业务 grant 导致配置拒绝。
 - 每个连接只处理一个操作。UTF-8 NDJSON 每帧含 LF 上限 2 MiB，同时最多 4 个连接，单连接总时限 5 秒。服务先发 `{v:1,challenge}`，challenge 为新生成的 64 位十六进制串。请求为 `{v:1,op,...,auth:{key_id,mac}}`。规范化 JSON 使用排序键、UTF-8、紧凑分隔符、禁止非有限数值。请求 HMAC-SHA256 覆盖 ASCII `MBRIDGE/1`、NUL、challenge、NUL、去掉 auth 的规范化请求。已认证响应 `{v:1,ok,value|code,server_mac}` 的签名覆盖 `MBRIDGE/1/REPLY`、NUL、challenge、NUL、请求 mac、NUL、去掉 server_mac 的规范化响应。所有 MAC 为小写 hex，所有 NUL 均为一个零字节。未知 key、错误 MAC 或非法初始帧可收到无签名拒绝。没有有效响应签名就没有可采信的成功或已证实未入队。
 - `probe()` 只返回 `{service:"original-bridge",protocol:1,operations:["verified_job","lookup_report","enqueue_result"]}`。成功只证明本机签名往返。 `verified_job(job_id)` 返回可信 grant 中的 origin、origin_ref、task 及原 job_id、payload_hash、record。记录未保全时回 `UNAVAILABLE`。经认证的读取可要求原 collector 在既有共享时间与 RPC 预算内补读一条已知且摘要一致的原 job，仅在原请求上重查。没有本机路由记录的 ID 不会触发远端补读。原件持久保存在桥既有本机配额内，最多 64 份、小于等于 8 MiB 且不超过数据库上限四分之一。没有自动清理或扩容。
-- `lookup_report(job_id,event_id)` 按原事件查本机 outbox。已认证的 null 代表该 job 本机没有该事件。 `enqueue_result(project_id,job_id,payload_hash,event_id,status,result)` 仅接收已授权只读 QUERY_BLOCKER 的协调结果。服务核原项目、原请求、任务与 tracking、结果状态、核心版本／摘要和稳定事件 ID。核心结果上限 256 KiB，最终带 tracking 的 wire 结果上限 1 MiB。事件 ID 为 `coordinate-` 加规范化 `[coordinator_id,project_id,request_id,job_id,core_version]` 的 SHA-256。重复相同事件返回原记录，冲突拒绝。两种操作的记录字段为 `job_id,event_id,status,result_hash,state,receipt`。PENDING 表示已保存本机；SENT 附原服务器版本和哈希回执。云端精确读取与 ACK 仍走原受权读取方。
+- `lookup_report(job_id,event_id)` 按原事件查本机 outbox。已认证的 null 代表该 job 本机没有该事件。 `enqueue_result(project_id,job_id,payload_hash,event_id,status,result)` 接收逐件授权的协调结果；缺省授权仅限只读 QUERY_BLOCKER，目标交办另见下述类型合同。服务核原项目、原请求、任务与 tracking、结果状态、核心版本／摘要和稳定事件 ID。核心结果上限 256 KiB，最终带 tracking 的 wire 结果上限 1 MiB。事件 ID 为 `coordinate-` 加规范化 `[coordinator_id,project_id,request_id,job_id,core_version]` 的 SHA-256。重复相同事件返回原记录，冲突拒绝。两种操作的记录字段为 `job_id,event_id,status,result_hash,state,receipt`。PENDING 表示已保存本机；SENT 附原服务器版本和哈希回执。云端精确读取与 ACK 仍走原受权读取方。
 - 拒绝码为 `ACCESS_DENIED`、`INVALID_REQUEST`、`CONFLICT` 和 `UNAVAILABLE`。未知结果、超时和丢确认只按原 job/event 查，不能由客户端换事件重发。仅读和排队按动作各自授权。
 
 **部署与恢复。** 安装规则及签名探针步骤见 [本机操作说明](mac/README.md#协调员本地签名探针)。未取得现任负责人、当前云端Dot和项目项的独立证明之前，只能验收已安装服务的探针及隔离数据。端口不提供身份登记、填充任命、远程开通、自动写 Projects 或代理业务 ACK 的操作。
+
+### 逐件目标交办的数据合同
+
+桥端代码增加 `DELEGATE_GOAL` 数据校验，不执行任务、联系负责人或自动开通权限。现有 grant 缺少 `request_kind` 时仍只允许 `QUERY_BLOCKER`；目标交办必须显式配置 `request_kind:"DELEGATE_GOAL"`。显式 `QUERY_BLOCKER` 与省略该字段复用同一查询原件证明，已捕获的两种写法均可回读。目标类型保留独立来源摘要。其余类型拒绝，类型字段与 `transport_probe` 不得混用。`probe-` 密钥仍不允许任何业务 grant。新代码或文档存在不代表宿主已经部署或批准具体目标。
+
+目标请求的 `coordinator_request` 精确字段为原 `schema_version,request_id,idempotency_key,kind,expected_generation,deadline,authorization_ref,evidence_refs,budget` 加 `goal`。预算固定为 `{dispatch_attempts:1,production_writes:0,audio_generations:0}`，整数不得用布尔值替代。`goal` 精确包含 `objective,work_key,acceptance_criteria,evidence_refs,related_request_ids,scope_refs,allowed_actions,next_check_at,review_requirement`。协调目标的 project、job、request、idempotency、related request 与 action ID 均为 1–128 位 ASCII 字母、数字或 `._:-`，首位须为字母或数字。资产引用保留原值，只接受可打印且无首尾空白的字符串。验收标准、证据、资产范围和允许动作非空且不重复；允许动作仅为 `coordinate_existing_owner,verify_existing_evidence,plan_independent_review,report_progress`。目标复查时刻须带时区且不晚于原期限，受理时的新鲜度由协调核心核验。
+
+`work_key` 是规范化 `{task_ref,scope_refs:sorted(scope_refs)}` 的 SHA-256，`task_ref` 使用已核 grant 的正式 Issue URL 或 draft ID；payload 中等价的 `github:仓库#编号` 别名不产生另一份工作身份。原 payload/hash、job、来源主体证明、Project 条目、收件者与回程仍须精确相符。桥保留并验证外部合同，不跨仓导入协调运行模块。
+
+回传继续使用 `PROJECT_COORDINATOR_RESULT` 包装及原 job/event/hash，允许多个独立核心版本。协调员按核心版本顺序入队，原 collector 按本机持久入队顺序补传。同毫秒入队及原事件重试保留该顺序。目标业务报告必须是 `GOAL_UPDATE`，并绑定 `work_key`、原请求、action、generation、来源主体与原生证据引用。报告代次必须等于原请求冻结的 `expected_generation`。核定原生负责人、动作、报告序列及听检证据由受信生产者和协调核心负责，桥只接收逐件授权生产者的签名数据。跨代交接需另行取得有效绑定。业务阶段单列 `goal_state=ACCEPTED/IN_PROGRESS/BLOCKED/COMPLETED`，与 `report.phase` 一致；外层 `REPORTED_COMPLETED` 只表示这一份报告已提交，不代表目标完成。目标进度不能作为 `BLOCKER_REPLY` 或旧查询结果发布。
+
+非终态报告含 `seq,phase,summary,observed_at,evidence_refs,next_owner,next_check_at`；终态改为 `terminal_condition,criteria_evidence`，逐项覆盖原验收标准。要求独立听检时还须有 `independent_review`：审查者与生产者须使用不同的可打印身份引用且无首尾空白，并提供精确资产范围、原件证据，方法只能是 `human_listening` 或 `audio_perception`。ASR、技术计数或空泛通过不能充当该合同；桥只验证被证明来源的记录结构，不自行判定听感。历史报告的复查点可已过去，查回原事件不据此失败。
+
+`COORDINATOR_WAIT_REPORT` 可回传等待快照，但必须标明 `original_kind:"DELEGATE_GOAL"`、`goal_state`（仅 `ADMITTED/ACCEPTED/IN_PROGRESS/BLOCKED`）和 `last_seq`，没有负责人业务报告字段，也不允许声明 `COMPLETED`。它不能新增接受或完成事实。稳定事件重试、冲突拒绝、撤回授权、原 collector 补传及原端读取确认沿原合同保留。本次开发不创建密钥、grant 或 pilot，不修改运行配置。
 
 ## 原计划的单件连通性任务
 
