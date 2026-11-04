@@ -47,6 +47,10 @@ def token(value):
     return isinstance(value, str) and ID.fullmatch(value) is not None
 
 
+def goal_id(value):
+    return token(value) and value[0].isalnum()
+
+
 def digest(value):
     return isinstance(value, str) and DIGEST.fullmatch(value) is not None
 
@@ -78,7 +82,7 @@ def goal_time(value):
 def check_goal_request(body, task_ref):
     """Validate the external goal contract locally; never import the coordinator runtime."""
     check(set(body) == GOAL_REQUEST_FIELDS and body["kind"] == GOAL_KIND
-          and token(body["idempotency_key"]) and type(body["expected_generation"]) is int
+          and goal_id(body["request_id"]) and goal_id(body["idempotency_key"]) and type(body["expected_generation"]) is int
           and 0 <= body["expected_generation"] < MAX_INT, "CONFLICT")
     goal_text(body["authorization_ref"])
     goal_strings(body["evidence_refs"])
@@ -89,8 +93,9 @@ def check_goal_request(body, task_ref):
     for name in ("acceptance_criteria", "evidence_refs", "scope_refs", "allowed_actions"):
         goal_strings(goal[name], required=True)
         check(len(set(goal[name])) == len(goal[name]), "CONFLICT")
+    check(all(short_text(ref) for ref in goal["scope_refs"]), "CONFLICT")
     goal_strings(goal["related_request_ids"])
-    check(all(token(value) for value in goal["related_request_ids"])
+    check(all(goal_id(value) for value in goal["related_request_ids"])
           and set(goal["allowed_actions"]) <= GOAL_ACTIONS
           and goal["review_requirement"] in ("none", "independent_listening"), "CONFLICT")
     check(goal["work_key"] == _hash(_json({"task_ref": task_ref, "scope_refs": sorted(goal["scope_refs"])}))
@@ -114,8 +119,8 @@ def check_goal_result(core, body, grant):
     goal = body["goal"]
     check(set(core) == common | {"work_key", "action_id", "generation", "goal_state", "report"}
           and core.get("kind") == "GOAL_UPDATE" and core["work_key"] == goal["work_key"]
-          and token(core["action_id"]) and type(core["generation"]) is int
-          and 0 <= core["generation"] < MAX_INT, "CONFLICT")
+          and goal_id(core["action_id"]) and type(core["generation"]) is int
+          and core["generation"] == body["expected_generation"], "CONFLICT")
     report = core["report"]
     base = {"seq", "phase", "summary", "observed_at", "evidence_refs", "next_owner"}
     check(isinstance(report, dict) and base <= report.keys() and type(report["seq"]) is int
@@ -148,8 +153,7 @@ def check_goal_result(core, body, grant):
         review = report["independent_review"]
         check(isinstance(review, dict) and set(review) == {"state", "reviewer", "producer", "scope_refs", "evidence_refs", "method"}
               and review["state"] == "VERIFIED" and review["method"] in ("human_listening", "audio_perception"), "CONFLICT")
-        goal_text(review["reviewer"])
-        goal_text(review["producer"])
+        check(short_text(review["reviewer"]) and short_text(review["producer"]), "CONFLICT")
         goal_strings(review["scope_refs"], required=True)
         goal_strings(review["evidence_refs"], required=True)
         check(review["reviewer"] != review["producer"] and len(review["scope_refs"]) == len(goal["scope_refs"])
@@ -225,9 +229,14 @@ def load_policy(path):
     return Path(cfg["socket_path"]), keys, records
 
 
-def proof_digest(grant):
-    # Key rotation and narrowing actions preserve the independently attested origin.
-    return _hash(_json({k: v for k, v in grant.items() if k not in ("key_id", "actions")}))
+def proof_digest(grant, *, explicit_query=False):
+    proof = {k: v for k, v in grant.items() if k not in ("key_id", "actions")}
+    if proof.get("request_kind", "QUERY_BLOCKER") == "QUERY_BLOCKER" and "transport_probe" not in proof:
+        if explicit_query:
+            proof["request_kind"] = "QUERY_BLOCKER"
+        else:
+            proof.pop("request_kind", None)
+    return _hash(_json(proof))
 
 
 def fits(job, g):
@@ -270,6 +279,8 @@ def fits(job, g):
     budget = body.get("budget")
     kind = g.get("request_kind", "QUERY_BLOCKER")
     if kind == GOAL_KIND:
+        if not goal_id(g["job_id"]) or not goal_id(g["project_id"]):
+            return False
         try:
             check_goal_request(body, task_ref)
             check(_hash(_json(p)) == g["payload_hash"], "CONFLICT")
@@ -358,6 +369,10 @@ class CoordinatorPort:
         if op == "verified_job" and "transport_probe" in g:
             check(datetime.now(timezone.utc) < transport_deadline(g["transport_probe"]), "ACCESS_DENIED")
         record = self.store.coordinator_record(g["job_id"], proof_digest(g))
+        if record is None and g.get("request_kind", "QUERY_BLOCKER") == "QUERY_BLOCKER" and "transport_probe" not in g:
+            # The initial typed-port version stored an explicit QUERY marker. All
+            # other original proof fields must still match the authorized grant.
+            record = self.store.coordinator_record(g["job_id"], proof_digest(g, explicit_query=True))
         if record is None:
             if op == "verified_job":
                 with self.lock:

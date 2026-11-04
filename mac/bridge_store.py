@@ -424,7 +424,9 @@ class BridgeStore:
     def pending_reports(self, limit=50):
         _number(limit, "limit", 1, 1000)
         with self._transaction() as connection:
-            return [self._report(row) for row in connection.execute("SELECT * FROM reports WHERE state='PENDING' ORDER BY created_at,event_id LIMIT ?", (limit,))]
+            # The remote mailbox assigns versions in publication order. Hashes and
+            # millisecond timestamps cannot order two reports queued together.
+            return [self._report(row) for row in connection.execute("SELECT * FROM reports WHERE state='PENDING' ORDER BY rowid LIMIT ?", (limit,))]
 
     def mark_report_sent(self, event_id, receipt):
         _id(event_id, "event_id")

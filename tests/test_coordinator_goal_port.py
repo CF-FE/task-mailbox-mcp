@@ -2,8 +2,11 @@
 
 from copy import deepcopy
 import unittest
+from unittest.mock import patch
 
 import test_coordinator_port as existing
+from mailbox_store import Store
+from mac.collector import collect_once
 from mac.coordinator_port import CoordinatorPort, PortError, proof_digest
 
 
@@ -98,6 +101,33 @@ class CoordinatorGoalPortTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(f.dispatch({'v': 1, 'op': 'probe'}, 'probe-test')['service'], 'original-bridge')
         self.assertEqual(f.dispatch(f.req, 'probe-test'), 'ACCESS_DENIED')
 
+    async def test_explicit_query_reads_previously_captured_implicit_grant(self):
+        f = existing.CoordinatorPortTests('test_origin_from_attested_record_and_not_payload')
+        f.setUp()
+        self.addCleanup(f.tmp.cleanup)
+        await f.collect()
+        f.transport.calls.clear()
+        f.grant['request_kind'] = 'QUERY_BLOCKER'
+        f.save()
+        self.assertEqual(f.dispatch(f.req)['record'], f.j)
+        self.assertEqual(f.dispatch(f.result_request())['state'], 'PENDING')
+        del f.grant['request_kind']
+        f.save()
+        self.assertEqual(f.dispatch(f.req)['record'], f.j)
+        self.assertEqual(f.transport.calls, [])
+
+    def test_implicit_query_reads_explicit_historical_proof_without_changing_origin(self):
+        f = existing.CoordinatorPortTests('test_origin_from_attested_record_and_not_payload')
+        f.setUp()
+        self.addCleanup(f.tmp.cleanup)
+        # Reconstruct the pre-fix proof, independently of the current digest function.
+        fields = {k: v for k, v in f.grant.items() if k not in ('key_id', 'actions')}
+        f.store.record_job(f.j, proof_hash=existing.sha({**fields, 'request_kind': 'QUERY_BLOCKER'}))
+        self.assertEqual(f.dispatch(f.req)['record'], f.j)
+        f.grant['origin_ref'] = 'synthetic:another-turn'
+        f.save()
+        self.assertEqual(f.dispatch(f.req), 'UNAVAILABLE')
+
     async def test_exact_source_hash_and_typed_proof_are_required(self):
         f = self.f
         await f.collect()
@@ -120,12 +150,15 @@ class CoordinatorGoalPortTests(unittest.IsolatedAsyncioTestCase):
         original = deepcopy(f.j)
         mutations = [
             lambda b: b.update(extra='not allowed'),
+            lambda b: b.update(idempotency_key='-bad'),
+            lambda b: b.update(request_id='_bad'),
             lambda b: b.update(expected_generation=True),
             lambda b: b.update(evidence_refs=['x'] * 63),
             lambda b: b['budget'].update(dispatch_attempts=2),
             lambda b: b['budget'].update(production_writes=True),
             lambda b: b['goal'].update(extra='not allowed'),
             lambda b: b['goal'].update(acceptance_criteria=[]),
+            lambda b: b['goal'].update(related_request_ids=[':bad']),
             lambda b: b['goal'].update(scope_refs=['asset:a', 'asset:a']),
             lambda b: b['goal'].update(allowed_actions=['generate_audio']),
             lambda b: b['goal'].update(work_key='0' * 64),
@@ -139,6 +172,14 @@ class CoordinatorGoalPortTests(unittest.IsolatedAsyncioTestCase):
                 mutate(f.j['payload']['coordinator_request'])
                 self.freeze()
                 self.assertIsNone(f.port.capture_proof(f.j))
+
+    def test_scope_refs_must_be_canonical_even_with_matching_work_key(self):
+        for ref in ('asset:batch-01/a ', 'asset:batch\t01/a'):
+            with self.subTest(ref=ref):
+                self.goal.update(scope_refs=[ref], work_key=existing.sha(
+                    {'task_ref': self.f.t['issue_url'], 'scope_refs': [ref]}))
+                self.freeze()
+                self.assertIsNone(self.f.port.capture_proof(self.f.j))
 
     async def test_canonical_task_identity_is_stable_across_issue_alias(self):
         f = self.f
@@ -155,18 +196,28 @@ class CoordinatorGoalPortTests(unittest.IsolatedAsyncioTestCase):
     async def test_multiple_goal_updates_use_original_job_and_stable_events(self):
         f = self.f
         await f.collect()
+        remote = Store(f.store.path.with_name('remote.sqlite'))
+        remote.submit_job(f.j['job_id'], f.j['payload'], f.j['payload_hash'])
         first = self.result_request()
-        second = self.result_request(2, 'IN_PROGRESS')
-        a, b = f.dispatch(first), f.dispatch(second)
+        second = self.result_request(2, 'COMPLETED')
+        with patch('mac.bridge_store._now', return_value='2026-01-01T00:01:02.345+00:00'):
+            a, b = f.dispatch(first), f.dispatch(second)
         self.assertEqual((a['state'], b['state']), ('PENDING', 'PENDING'))
         self.assertNotEqual(a['event_id'], b['event_id'])
         self.assertEqual(a, f.dispatch(first))  # lost local receipt, original event only
         self.assertEqual(len(f.store.pending_reports()), 2)
-        await f.collect()
-        for request in (first, second):
+        async def transport(name, args):
+            if name == 'publish_result':
+                return remote.publish_result(**args)
+            return await f.transport(name, args)
+
+        await collect_once(f.store, transport, port=f.port)
+        for version, request in enumerate((first, second), 1):
             lookup = {k: request[k] for k in ('v', 'job_id', 'event_id')} | {'op': 'lookup_report'}
-            self.assertEqual(f.dispatch(lookup)['state'], 'SENT')
-        self.assertEqual(len(f.transport.reports), 2)
+            saved = f.dispatch(lookup)
+            self.assertEqual((saved['state'], saved['receipt']['version']), ('SENT', version))
+            self.assertEqual(remote.get_result('job-1', version)['result'], request['result'])
+        self.assertEqual(remote.get_result('job-1')['result']['result']['goal_state'], 'COMPLETED')
 
     async def test_cross_job_kind_scope_and_forged_success_are_rejected(self):
         f = self.f
@@ -175,7 +226,8 @@ class CoordinatorGoalPortTests(unittest.IsolatedAsyncioTestCase):
         for key, value in [('job_id', 'other-job'), ('request_id', 'other-request'),
                            ('payload_hash', '0' * 64), ('kind', 'BLOCKER_REPLY'),
                            ('work_key', '0' * 64), ('goal_state', 'COMPLETED'),
-                           ('source_evidence_ref', ''), ('generation', True)]:
+                           ('source_evidence_ref', ''), ('generation', True), ('generation', 9999),
+                           ('action_id', ':bad')]:
             with self.subTest(key=key):
                 changed = deepcopy(request)
                 changed['result']['result'][key] = value
@@ -216,6 +268,8 @@ class CoordinatorGoalPortTests(unittest.IsolatedAsyncioTestCase):
             lambda r: r['criteria_evidence'][1].update(criterion=r['criteria_evidence'][0]['criterion']),
             lambda r: r['independent_review'].update(method='ASR'),
             lambda r: r['independent_review'].update(reviewer=r['independent_review']['producer']),
+            lambda r: r['independent_review'].update(reviewer=r['independent_review']['producer'] + ' '),
+            lambda r: r['independent_review'].update(producer='producer\taccount'),
             lambda r: r['independent_review'].update(scope_refs=['asset:batch-01/a']),
             lambda r: r['independent_review'].update(evidence_refs=[]),
             lambda r: r.update(next_check_at='2098-01-01T00:00:00Z'),

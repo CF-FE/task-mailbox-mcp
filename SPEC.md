@@ -97,15 +97,15 @@ ARCHITECTURE TRIAGE
 
 ### 逐件目标交办的数据合同
 
-桥端代码增加 `DELEGATE_GOAL` 数据校验，不执行任务、联系负责人或自动开通权限。现有 grant 缺少 `request_kind` 时仍只允许 `QUERY_BLOCKER`；目标交办必须显式配置 `request_kind:"DELEGATE_GOAL"`。显式 `QUERY_BLOCKER` 也可用，其余类型拒绝。此字段参与原件来源摘要，与 `transport_probe` 不得混用；`probe-` 密钥仍不允许任何业务 grant。新代码或文档存在不代表宿主已经部署或批准具体目标。
+桥端代码增加 `DELEGATE_GOAL` 数据校验，不执行任务、联系负责人或自动开通权限。现有 grant 缺少 `request_kind` 时仍只允许 `QUERY_BLOCKER`；目标交办必须显式配置 `request_kind:"DELEGATE_GOAL"`。显式 `QUERY_BLOCKER` 与省略该字段复用同一查询原件证明，已捕获的两种写法均可回读。目标类型保留独立来源摘要。其余类型拒绝，类型字段与 `transport_probe` 不得混用。`probe-` 密钥仍不允许任何业务 grant。新代码或文档存在不代表宿主已经部署或批准具体目标。
 
-目标请求的 `coordinator_request` 精确字段为原 `schema_version,request_id,idempotency_key,kind,expected_generation,deadline,authorization_ref,evidence_refs,budget` 加 `goal`。预算固定为 `{dispatch_attempts:1,production_writes:0,audio_generations:0}`，整数不得用布尔值替代。`goal` 精确包含 `objective,work_key,acceptance_criteria,evidence_refs,related_request_ids,scope_refs,allowed_actions,next_check_at,review_requirement`。验收标准、证据、资产范围和允许动作非空且不重复；允许动作仅为 `coordinate_existing_owner,verify_existing_evidence,plan_independent_review,report_progress`。目标复查时刻须带时区且不晚于原期限，受理时的新鲜度由协调核心核验。
+目标请求的 `coordinator_request` 精确字段为原 `schema_version,request_id,idempotency_key,kind,expected_generation,deadline,authorization_ref,evidence_refs,budget` 加 `goal`。预算固定为 `{dispatch_attempts:1,production_writes:0,audio_generations:0}`，整数不得用布尔值替代。`goal` 精确包含 `objective,work_key,acceptance_criteria,evidence_refs,related_request_ids,scope_refs,allowed_actions,next_check_at,review_requirement`。协调目标的 project、job、request、idempotency、related request 与 action ID 均为 1–128 位 ASCII 字母、数字或 `._:-`，首位须为字母或数字。资产引用保留原值，只接受可打印且无首尾空白的字符串。验收标准、证据、资产范围和允许动作非空且不重复；允许动作仅为 `coordinate_existing_owner,verify_existing_evidence,plan_independent_review,report_progress`。目标复查时刻须带时区且不晚于原期限，受理时的新鲜度由协调核心核验。
 
 `work_key` 是规范化 `{task_ref,scope_refs:sorted(scope_refs)}` 的 SHA-256，`task_ref` 使用已核 grant 的正式 Issue URL 或 draft ID；payload 中等价的 `github:仓库#编号` 别名不产生另一份工作身份。原 payload/hash、job、来源主体证明、Project 条目、收件者与回程仍须精确相符。桥保留并验证外部合同，不跨仓导入协调运行模块。
 
-回传继续使用 `PROJECT_COORDINATOR_RESULT` 包装及原 job/event/hash，允许多个独立核心版本。目标业务报告必须是 `GOAL_UPDATE`，并绑定 `work_key`、原请求、action、generation、来源主体与原生证据引用。业务阶段单列 `goal_state=ACCEPTED/IN_PROGRESS/BLOCKED/COMPLETED`，与 `report.phase` 一致；外层 `REPORTED_COMPLETED` 只表示这一份报告已提交，不代表目标完成。目标进度不能作为 `BLOCKER_REPLY` 或旧查询结果发布。
+回传继续使用 `PROJECT_COORDINATOR_RESULT` 包装及原 job/event/hash，允许多个独立核心版本。协调员按核心版本顺序入队，原 collector 按本机持久入队顺序补传。同毫秒入队及原事件重试保留该顺序。目标业务报告必须是 `GOAL_UPDATE`，并绑定 `work_key`、原请求、action、generation、来源主体与原生证据引用。报告代次必须等于原请求冻结的 `expected_generation`。核定原生负责人、动作、报告序列及听检证据由受信生产者和协调核心负责，桥只接收逐件授权生产者的签名数据。跨代交接需另行取得有效绑定。业务阶段单列 `goal_state=ACCEPTED/IN_PROGRESS/BLOCKED/COMPLETED`，与 `report.phase` 一致；外层 `REPORTED_COMPLETED` 只表示这一份报告已提交，不代表目标完成。目标进度不能作为 `BLOCKER_REPLY` 或旧查询结果发布。
 
-非终态报告含 `seq,phase,summary,observed_at,evidence_refs,next_owner,next_check_at`；终态改为 `terminal_condition,criteria_evidence`，逐项覆盖原验收标准。要求独立听检时还须有 `independent_review`：不同于生产者的审查者、精确资产范围、原件证据，方法只能是 `human_listening` 或 `audio_perception`。ASR、技术计数或空泛通过不能充当该合同；桥只验证被证明来源的记录结构，不自行判定听感。历史报告的复查点可已过去，查回原事件不据此失败。
+非终态报告含 `seq,phase,summary,observed_at,evidence_refs,next_owner,next_check_at`；终态改为 `terminal_condition,criteria_evidence`，逐项覆盖原验收标准。要求独立听检时还须有 `independent_review`：审查者与生产者须使用不同的可打印身份引用且无首尾空白，并提供精确资产范围、原件证据，方法只能是 `human_listening` 或 `audio_perception`。ASR、技术计数或空泛通过不能充当该合同；桥只验证被证明来源的记录结构，不自行判定听感。历史报告的复查点可已过去，查回原事件不据此失败。
 
 `COORDINATOR_WAIT_REPORT` 可回传等待快照，但必须标明 `original_kind:"DELEGATE_GOAL"`、`goal_state`（仅 `ADMITTED/ACCEPTED/IN_PROGRESS/BLOCKED`）和 `last_seq`，没有负责人业务报告字段，也不允许声明 `COMPLETED`。它不能新增接受或完成事实。稳定事件重试、冲突拒绝、撤回授权、原 collector 补传及原端读取确认沿原合同保留。本次开发不创建密钥、grant 或 pilot，不修改运行配置。
 
