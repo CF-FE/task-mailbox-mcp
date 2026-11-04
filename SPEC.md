@@ -99,7 +99,9 @@ ARCHITECTURE TRIAGE
 
 桥端代码增加 `DELEGATE_GOAL` 数据校验，不执行任务、联系负责人或自动开通权限。现有 grant 缺少 `request_kind` 时仍只允许 `QUERY_BLOCKER`；目标交办必须显式配置 `request_kind:"DELEGATE_GOAL"`。显式 `QUERY_BLOCKER` 与省略该字段复用同一查询原件证明，已捕获的两种写法均可回读。目标类型保留独立来源摘要。其余类型拒绝，类型字段与 `transport_probe` 不得混用。`probe-` 密钥仍不允许任何业务 grant。新代码或文档存在不代表宿主已经部署或批准具体目标。
 
-目标请求的 `coordinator_request` 精确字段为原 `schema_version,request_id,idempotency_key,kind,expected_generation,deadline,authorization_ref,evidence_refs,budget` 加 `goal`。预算固定为 `{dispatch_attempts:1,production_writes:0,audio_generations:0}`，整数不得用布尔值替代。`goal` 精确包含 `objective,work_key,acceptance_criteria,evidence_refs,related_request_ids,scope_refs,allowed_actions,next_check_at,review_requirement`。协调目标的 project、job、request、idempotency、related request 与 action ID 均为 1–128 位 ASCII 字母、数字或 `._:-`，首位须为字母或数字。资产引用保留原值，只接受可打印且无首尾空白的字符串。验收标准、证据、资产范围和允许动作非空且不重复；允许动作仅为 `coordinate_existing_owner,verify_existing_evidence,plan_independent_review,report_progress`。目标复查时刻须带时区且不晚于原期限，受理时的新鲜度由协调核心核验。
+目标请求的 `coordinator_request` 精确字段为原 `schema_version,request_id,idempotency_key,kind,expected_generation,deadline,authorization_ref,evidence_refs,budget` 加 `goal`。预算固定为 `{dispatch_attempts:1,production_writes:0,audio_generations:0}`，整数不得用布尔值替代。`goal` 必含 `objective,work_key,acceptance_criteria,evidence_refs,related_request_ids,scope_refs,allowed_actions,next_check_at,review_requirement`，唯一可选字段为 `acceptor_ref`。协调目标的 project、job、request、idempotency、related request 与 action ID 均为 1–128 位 ASCII 字母、数字或 `._:-`，首位须为字母或数字。资产引用保留原值，只接受可打印且无首尾空白的字符串。验收标准、证据、资产范围和允许动作非空且不重复；允许动作仅为 `coordinate_existing_owner,verify_existing_evidence,plan_independent_review,report_progress`。目标复查时刻须带时区且不晚于原期限，受理时的新鲜度由协调核心核验。
+
+发起方可以用 `goal.acceptor_ref` 指定业务验收者。引用限 1–2048 个可打印 Unicode 字符且无首尾空白，保留原值。桥拒绝空值、占位符、云端Dot的已知组织别名，以及与已核原生来源主体精确相同的引用。验收者任职与真实权限由协调核心和所属项目核验。省略时由协调核心按原件绑定的项目负责人代次确定验收者，桥保留原件，既有摘要和结果结构不变。
 
 `work_key` 是规范化 `{task_ref,scope_refs:sorted(scope_refs)}` 的 SHA-256，`task_ref` 使用已核 grant 的正式 Issue URL 或 draft ID；payload 中等价的 `github:仓库#编号` 别名不产生另一份工作身份。原 payload/hash、job、来源主体证明、Project 条目、收件者与回程仍须精确相符。桥保留并验证外部合同，不跨仓导入协调运行模块。
 

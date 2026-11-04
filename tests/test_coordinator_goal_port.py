@@ -181,6 +181,51 @@ class CoordinatorGoalPortTests(unittest.IsolatedAsyncioTestCase):
                 self.freeze()
                 self.assertIsNone(self.f.port.capture_proof(self.f.j))
 
+    def test_optional_acceptor_rejects_aliases_placeholders_and_original_subject(self):
+        for ref in (None, 3, '', '验收人 ', 'name\tref', 'x' * 2049, '___', 'TBD', 'n/a', '未指定',
+                    'UNKNOWN', 'unassigned', '待定', '待确认', 'Dot', 'G8', 'Cloud_Dot', '云端 Dot',
+                    'cloud_dot_organization_lead', 'G8-coordinator', self.f.grant['origin']['subject']):
+            with self.subTest(ref=repr(ref)[:50]):
+                self.goal['acceptor_ref'] = ref
+                self.freeze()
+                self.assertIsNone(self.f.port.capture_proof(self.f.j))
+        # Opaque native identifiers are case-sensitive. An exact match is required.
+        self.goal['acceptor_ref'] = self.f.grant['origin']['subject'].upper()
+        self.freeze()
+        self.assertIsNotNone(self.f.port.capture_proof(self.f.j))
+
+    async def test_acceptor_stays_in_original_goal_and_results_are_readable_without_ack(self):
+        f = self.f
+        before = f.j['payload_hash']
+        self.assertNotIn('acceptor_ref', self.goal)
+        self.assertIsNotNone(f.port.capture_proof(f.j))
+        self.assertEqual(existing.sha(f.j['payload']), before)
+        acceptor = 'review:制片组/A'
+        self.goal['acceptor_ref'] = acceptor
+        self.freeze()
+        self.assertNotEqual(f.j['payload_hash'], before)
+        await f.collect()
+        self.assertEqual(f.dispatch(f.req)['record'], f.j)
+        remote = Store(f.store.path.with_name('remote.sqlite'))
+        remote.submit_job(f.j['job_id'], f.j['payload'], f.j['payload_hash'])
+        request = self.result_request()
+        f.dispatch(request)
+
+        async def transport(name, args):
+            if name == 'publish_result':
+                return remote.publish_result(**args)
+            return await f.transport(name, args)
+
+        await collect_once(f.store, transport, port=f.port)
+        job = remote.get_job('job-1')
+        self.assertEqual(job['payload']['coordinator_request']['goal']['acceptor_ref'], acceptor)
+        result = remote.get_result('job-1', job['latest_result_version'])
+        self.assertEqual(result['result'], request['result'])
+        self.assertNotIn('acceptor_ref', result['result']['result'])
+        self.assertEqual(result['result']['task_tracking']['issue_url'], f.t['issue_url'])
+        self.assertEqual([e['event_type'] for e in remote.list_events()['events']],
+                         ['JOB_PERSISTED', 'RESULT_REPORTED'])
+
     async def test_canonical_task_identity_is_stable_across_issue_alias(self):
         f = self.f
         f.j['payload']['origin_task_id'] = 'github:ExampleOrg/demo#2'

@@ -79,7 +79,7 @@ def goal_time(value):
         raise PortError("CONFLICT") from None
 
 
-def check_goal_request(body, task_ref):
+def check_goal_request(body, task_ref, origin_subject):
     """Validate the external goal contract locally; never import the coordinator runtime."""
     check(set(body) == GOAL_REQUEST_FIELDS and body["kind"] == GOAL_KIND
           and goal_id(body["request_id"]) and goal_id(body["idempotency_key"]) and type(body["expected_generation"]) is int
@@ -88,7 +88,15 @@ def check_goal_request(body, task_ref):
     goal_strings(body["evidence_refs"])
     check(len(body["evidence_refs"]) <= 62, "CONFLICT")
     goal = body["goal"]
-    check(isinstance(goal, dict) and set(goal) == GOAL_FIELDS, "CONFLICT")
+    check(isinstance(goal, dict) and GOAL_FIELDS <= goal.keys() <= GOAL_FIELDS | {"acceptor_ref"}, "CONFLICT")
+    if "acceptor_ref" in goal:
+        ref = goal["acceptor_ref"]
+        check(short_text(ref) and ref != origin_subject, "CONFLICT")
+        # Normalize only to recognize organization aliases and placeholders.
+        # Native subject identifiers and the original payload remain exact.
+        alias = re.sub(r"[\s_-]+", "", ref.casefold())
+        check(alias not in {"dot", "g8", "clouddot", "云端dot", "clouddotorganizationlead", "g8coordinator",
+                            "", "unknown", "tbd", "unassigned", "n/a", "未指定", "待定", "待确认"}, "CONFLICT")
     goal_text(goal["objective"], 32768)
     for name in ("acceptance_criteria", "evidence_refs", "scope_refs", "allowed_actions"):
         goal_strings(goal[name], required=True)
@@ -282,7 +290,7 @@ def fits(job, g):
         if not goal_id(g["job_id"]) or not goal_id(g["project_id"]):
             return False
         try:
-            check_goal_request(body, task_ref)
+            check_goal_request(body, task_ref, g["origin"]["subject"])
             check(_hash(_json(p)) == g["payload_hash"], "CONFLICT")
         except (ValueError, KeyError, TypeError, RecursionError, OverflowError):
             return False

@@ -16,7 +16,9 @@
 
 协调员空闲配置保持 `pilot:null`，不启用 `goal_channel_config`。这两个字段属于协调员配置；桥端 `coordinator-port.json` 仍只接受其原有 schema。桥端没有可选端口配置时只运行原收发；探测配置使用 `probe-` key 与空业务 grants。新增目标源码或安装包不会把这些状态变成业务准入。
 
-项目由负责人组织。云端Dot可指派验收者，默认由项目负责人验收。云端Dot发起交办后可离线，负责人按本地已受理的原单和有效授权推进。项目验收与摘要送达分别记账，网络恢复后原 collector 继续补传。云端Dot可查原 job 的结果或 GitHub Project 的里程碑，日常无需主动确认已读。
+项目由负责人组织。云端Dot可在原件的 `goal.acceptor_ref` 中指派验收者，省略时由原派发代次的项目负责人验收。云端Dot发起交办后可离线，负责人按本地已受理的原单和有效授权推进。项目验收与摘要送达分别记账，网络恢复后原 collector 继续补传。云端Dot可查原 job 的结果或 GitHub Project 的里程碑，日常无需主动确认已读。
+
+按原 `job_id` 查 `get_job`，读取 `latest_result_version` 和原 `payload.tracking` 中的 Project 条目、Issue 或 draft 引用。版本为 0 表示信箱尚无结果。用 `get_result(job_id, version)` 核精确摘要及 `result.result` 中的 `kind`、`goal_state`。若最新版本为 `COORDINATOR_WAIT_REPORT`，它是等待快照；需要最后一份负责人报告时，从这个版本向前有界查找 `GOAL_UPDATE`，注明查阅的范围和观察时间。上述读取均不写 ACK。项目里程碑由获授权记录者回填原条目。
 
 ## 单件启用顺序
 
