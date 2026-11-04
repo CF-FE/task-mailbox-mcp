@@ -8,7 +8,9 @@
 
 本轮从个人整合仓固定来源 `9d36feb436264f2c0a065be7e644043a930a98dd` 接回 47 个服务文件，排除个人整合记录 `INTEGRATION.md`／`import-manifest.json`；复制时来源 hash 一致，逐文件基线见 [source-updates.json](source-updates.json)。本页随后进行归属与权限更正，来源记录保留复制时字节。本次接收已提交为 `652406bf09ed589285942293129215d35363a19e`，组织规则增量为 `3add47a`，均已推送本仓；个人整合仓只保留历史部署副本。
 
-Mac 桥已于 **2026-11-04 10:48（北京时间）** 升级到 [PR #4 合并提交 `560b9f5`](https://github.com/CF-FE/task-mailbox-mcp/commit/560b9f5de160caf989cfe48d6bc5a83fb0a7bd1a)。13 个运行文件全部匹配该提交。原 launchd 服务已加载新进程，签名端口探针通过，10:48:31 原 collector 完成一次远端轮询（`OK / ROUND_COMPLETE`）。10:49:11 又出现升级前已有的 `NETWORK_FAILED`（`CLIENT_OPEN / RuntimeError`），原因仍为 `UNKNOWN`。10:49:47 本机端口仍就绪。切换前后 8 件任务、24 条收件事件、8 份报告和 5 份已保存原件一致，业务授权及待补传报告均为 0。此次改动位于 Mac 桥，VPS 服务代码无变更。
+当前 Mac 桥运行 [PR #6 合并提交 `95dec8b`](https://github.com/CF-FE/task-mailbox-mcp/commit/95dec8b9cdd6da1d8ab58fdbd2ffca936f64954a)。北京时间 2026-11-04 13:11:30，新 collector 的本机端口就绪，13 份运行文件与合并提交一致，仅 `coordinator_port.py` 需要更换。8 件任务、24 条收件事件、8 份报告和 5 份准入原件保留，业务授权仍为 0。本轮只更新 Mac 桥以识别原目标的可选验收者引用，VPS 无服务改动。
+
+此前，Mac 桥已于 **2026-11-04 10:48（北京时间）** 升级到 [PR #4 合并提交 `560b9f5`](https://github.com/CF-FE/task-mailbox-mcp/commit/560b9f5de160caf989cfe48d6bc5a83fb0a7bd1a)。13 个运行文件全部匹配该提交。原 launchd 服务已加载新进程，签名端口探针通过，10:48:31 原 collector 完成一次远端轮询（`OK / ROUND_COMPLETE`）。10:49:11 又出现升级前已有的 `NETWORK_FAILED`（`CLIENT_OPEN / RuntimeError`），原因仍为 `UNKNOWN`。10:49:47 本机端口仍就绪。切换前后 8 件任务、24 条收件事件、8 份报告和 5 份已保存原件一致，业务授权及待补传报告均为 0。此次改动位于 Mac 桥，VPS 服务代码无变更。
 
 历史安装 `b6dc6b6dafff08f4ba25ddd999df4e679bb4a802` 的本机安装、隔离联测及生产探针状态见[11 月 3 日现场回执](#2026-11-03-mac-协调员端口现场回执)。前次安装固定为 `87cfb6551240c08d5aa8df3a8afdc305c5388a86`，11 个运行文件摘要回读一致；登录自启、原生 launchd running 和新的 collector=OK 成功时点已回读。观察范围仍为 Herdr／信箱两个项目，信箱路径已切到本 CF-FE 工作区，原数据验证临时绑定已归档解除，原 job／hash／事件／结果与专用 OAuth 身份保留，迁移中的路径元数据适配见下文。VPS 运行代码快照仍为原部署 `a06dc70e7994df7cb3c92a30cfde4276c26a5759`，本轮未重启或替换 VPS 服务。旧 Mac `6386d7f` 及来源 `9d36feb` 作为历史快照保留，不冒称当前来源；除特别标明，现场证据由主执行侧直接取得。
 
