@@ -138,6 +138,12 @@ launchctl print "gui/$(id -u)/io.maccoordinationbridge.coordinator"
 
 数据接口、密钥用途、消息签名和拒绝码见 [v1 合同](../SPEC.md#mac-本机协调员端口-v1)。部署前后分别记录固定 Git 提交、安装摘要、原服务状态、本机签名探针和确实获得的远端凭据。
 
+## 单件目标运行准入
+
+`DELEGATE_GOAL` 使用现有签名端口和原 job 的多版本结果，不增加 VPS 工具或桥端执行能力。桥的 `request_kind` grant、协调员的来源授权与精确 pilot、原生运行入口及真实组织工具分别核准；探针成功和旧 `QUERY_BLOCKER` 授权不能替代目标准入。协调员默认保持 `pilot:null`，该字段属于协调员配置，不能添加到桥的 `coordinator-port.json`。
+
+启用前按[单件目标运行准入与撤销](../docs/goal-runtime-admission.md)冻结原件、核对源证明与有效期、检查真实工具范围，最后启用精确 pilot。该说明还区分同 job 的 `UNKNOWN` 对账、明确 `NOT_FOUND` 与泛化读取错误，以及结果进入 outbox 前后的撤销责任。源码、隔离测试或网络恢复均不代替具体单件授权；已持久结果继续沿原 event 补传。
+
 ## 复用原云端检查计划
 
 原计划可预设一件获准的[确定性连通性任务](../SPEC.md#原计划的单件连通性任务)：自然提交冻结的 job/hash，Mac 协调员从上述签名端口读真实 nonce 并持久生成答复，原桥 outbox 自动上传，Dot 等待后读精确版本并 ACK。桥不生成协调员答复，不代理 Dot 的读确认；没有单件 grant 时维持原收件行为。
