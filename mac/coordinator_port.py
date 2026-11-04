@@ -25,6 +25,13 @@ ARGS = {"probe": set(), "verified_job": {"job_id"}, "lookup_report": {"job_id", 
         "enqueue_result": {"project_id", "job_id", "payload_hash", "event_id", "status", "result"}}
 FRAME = 2 * 1024 * 1024
 POLICY_BYTES = 256 * 1024
+GOAL_KIND = "DELEGATE_GOAL"
+GOAL_BUDGET = {"dispatch_attempts": 1, "production_writes": 0, "audio_generations": 0}
+GOAL_ACTIONS = {"coordinate_existing_owner", "verify_existing_evidence", "plan_independent_review", "report_progress"}
+GOAL_FIELDS = {"objective", "work_key", "acceptance_criteria", "evidence_refs", "related_request_ids",
+               "scope_refs", "allowed_actions", "next_check_at", "review_requirement"}
+GOAL_REQUEST_FIELDS = {"schema_version", "request_id", "idempotency_key", "kind", "expected_generation",
+                       "deadline", "authorization_ref", "evidence_refs", "budget", "goal"}
 
 
 class PortError(ValueError):
@@ -46,6 +53,107 @@ def digest(value):
 
 def short_text(value):
     return isinstance(value, str) and 0 < len(value) <= 2048 and value.strip() == value and value.isprintable()
+
+
+def goal_text(value, maximum=2048):
+    check(isinstance(value, str) and bool(value.strip()) and len(value) <= maximum and "\x00" not in value, "CONFLICT")
+
+
+def goal_strings(value, required=False):
+    check(isinstance(value, list) and len(value) <= 64 and (bool(value) or not required), "CONFLICT")
+    for item in value:
+        goal_text(item)
+
+
+def goal_time(value):
+    goal_text(value, 64)
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        check(parsed.tzinfo is not None, "CONFLICT")
+        return parsed.astimezone(timezone.utc)
+    except (ValueError, OverflowError):
+        raise PortError("CONFLICT") from None
+
+
+def check_goal_request(body, task_ref):
+    """Validate the external goal contract locally; never import the coordinator runtime."""
+    check(set(body) == GOAL_REQUEST_FIELDS and body["kind"] == GOAL_KIND
+          and token(body["idempotency_key"]) and type(body["expected_generation"]) is int
+          and 0 <= body["expected_generation"] < MAX_INT, "CONFLICT")
+    goal_text(body["authorization_ref"])
+    goal_strings(body["evidence_refs"])
+    check(len(body["evidence_refs"]) <= 62, "CONFLICT")
+    goal = body["goal"]
+    check(isinstance(goal, dict) and set(goal) == GOAL_FIELDS, "CONFLICT")
+    goal_text(goal["objective"], 32768)
+    for name in ("acceptance_criteria", "evidence_refs", "scope_refs", "allowed_actions"):
+        goal_strings(goal[name], required=True)
+        check(len(set(goal[name])) == len(goal[name]), "CONFLICT")
+    goal_strings(goal["related_request_ids"])
+    check(all(token(value) for value in goal["related_request_ids"])
+          and set(goal["allowed_actions"]) <= GOAL_ACTIONS
+          and goal["review_requirement"] in ("none", "independent_listening"), "CONFLICT")
+    check(goal["work_key"] == _hash(_json({"task_ref": task_ref, "scope_refs": sorted(goal["scope_refs"])}))
+          and goal_time(goal["next_check_at"]) <= goal_time(body["deadline"]), "CONFLICT")
+
+
+def check_goal_result(core, body, grant):
+    """A signed delivery is a report, not business acceptance or an audio assessment."""
+    common = {"schema_version", "kind", "project_id", "request_id", "job_id", "payload_hash", "task_ref",
+              "source_principal", "source_evidence_ref"}
+    check(type(core.get("schema_version")) is int and core["schema_version"] == 1, "CONFLICT")
+    goal_text(core.get("source_principal"))
+    goal_text(core.get("source_evidence_ref"))
+    if core.get("kind") == "COORDINATOR_WAIT_REPORT":
+        check(set(core) == common | {"waiting", "original_kind", "goal_state", "last_seq"}
+              and isinstance(core["waiting"], dict) and core["original_kind"] == GOAL_KIND
+              and core["goal_state"] in ("ADMITTED", "ACCEPTED", "IN_PROGRESS", "BLOCKED")
+              and type(core["last_seq"]) is int and 0 <= core["last_seq"] <= MAX_INT
+              and core["source_principal"] == grant["coordinator_id"], "CONFLICT")
+        return  # This is a coordinator state snapshot, never a new owner completion report.
+    goal = body["goal"]
+    check(set(core) == common | {"work_key", "action_id", "generation", "goal_state", "report"}
+          and core.get("kind") == "GOAL_UPDATE" and core["work_key"] == goal["work_key"]
+          and token(core["action_id"]) and type(core["generation"]) is int
+          and 0 <= core["generation"] < MAX_INT, "CONFLICT")
+    report = core["report"]
+    base = {"seq", "phase", "summary", "observed_at", "evidence_refs", "next_owner"}
+    check(isinstance(report, dict) and base <= report.keys() and type(report["seq"]) is int
+          and 1 <= report["seq"] <= MAX_INT and report["phase"] in ("ACCEPTED", "IN_PROGRESS", "BLOCKED", "COMPLETED")
+          and core["goal_state"] == report["phase"], "CONFLICT")
+    goal_text(report["summary"], 8192)
+    goal_text(report["next_owner"])
+    goal_strings(report["evidence_refs"], required=True)
+    observed = goal_time(report["observed_at"])
+    check(observed <= datetime.now(timezone.utc), "CONFLICT")
+    if report["phase"] != "COMPLETED":
+        check(set(report) == base | {"next_check_at"}
+              and observed < goal_time(report["next_check_at"]) <= goal_time(body["deadline"]), "CONFLICT")
+        return
+    expected = base | {"terminal_condition", "criteria_evidence"}
+    if goal["review_requirement"] == "independent_listening":
+        expected.add("independent_review")
+    check(set(report) == expected, "CONFLICT")
+    goal_text(report["terminal_condition"], 8192)
+    checks = report["criteria_evidence"]
+    check(isinstance(checks, list) and len(checks) == len(goal["acceptance_criteria"]), "CONFLICT")
+    covered = []
+    for item in checks:
+        check(isinstance(item, dict) and set(item) == {"criterion", "evidence_refs"}, "CONFLICT")
+        goal_text(item["criterion"])
+        goal_strings(item["evidence_refs"], required=True)
+        covered.append(item["criterion"])
+    check(len(set(covered)) == len(covered) and set(covered) == set(goal["acceptance_criteria"]), "CONFLICT")
+    if "independent_review" in expected:
+        review = report["independent_review"]
+        check(isinstance(review, dict) and set(review) == {"state", "reviewer", "producer", "scope_refs", "evidence_refs", "method"}
+              and review["state"] == "VERIFIED" and review["method"] in ("human_listening", "audio_perception"), "CONFLICT")
+        goal_text(review["reviewer"])
+        goal_text(review["producer"])
+        goal_strings(review["scope_refs"], required=True)
+        goal_strings(review["evidence_refs"], required=True)
+        check(review["reviewer"] != review["producer"] and len(review["scope_refs"]) == len(goal["scope_refs"])
+              and set(review["scope_refs"]) == set(goal["scope_refs"]), "CONFLICT")
 
 
 def private_parent(path):
@@ -95,7 +203,9 @@ def load_policy(path):
     for g in grants:
         required = {"key_id", "actions", "project_id", "coordinator_id", "recipient",
                     "report_route", "job_id", "payload_hash", "origin", "origin_ref", "task"}
-        check(isinstance(g, dict) and set(g) in (required, required | {"transport_probe"}), "UNAVAILABLE")
+        check(isinstance(g, dict) and set(g) in (required, required | {"transport_probe"}, required | {"request_kind"}), "UNAVAILABLE")
+        if "request_kind" in g:
+            check(g["request_kind"] in ("QUERY_BLOCKER", GOAL_KIND), "UNAVAILABLE")
         if "transport_probe" in g:
             probe = g["transport_probe"]
             check(isinstance(probe, dict) and set(probe) == {"nonce", "expires_at"}
@@ -158,14 +268,22 @@ def fits(job, g):
     elif not (t.get("draft_id") == task_ref and task_ref.startswith("DI_")):
         return False
     budget = body.get("budget")
+    kind = g.get("request_kind", "QUERY_BLOCKER")
+    if kind == GOAL_KIND:
+        try:
+            check_goal_request(body, task_ref)
+            check(_hash(_json(p)) == g["payload_hash"], "CONFLICT")
+        except (ValueError, KeyError, TypeError, RecursionError, OverflowError):
+            return False
     return (p.get("target") == {"service": "project-coordinator", "project_id": g["project_id"]}
             and p.get("recipient") == g["recipient"] and p.get("report_route") == g["report_route"]
             and t.get("repository") == task["repository"] and t.get("project_url") == task["project_ref"]
             and type(t.get("item_id")) is int and t["item_id"] == task["item_id"]
-            and p.get("origin_task_id") in origin_refs and body.get("kind") == "QUERY_BLOCKER"
+            and p.get("origin_task_id") in origin_refs and body.get("kind") == kind
             and type(body.get("schema_version")) is int and body["schema_version"] == 1 and token(body.get("request_id"))
             and isinstance(budget, dict) and all(type(v) is int for v in budget.values())
-            and budget == {"contact_attempts": 1, "production_writes": 0, "audio_generations": 0})
+            and budget == (GOAL_BUDGET if kind == GOAL_KIND else
+                           {"contact_attempts": 1, "production_writes": 0, "audio_generations": 0}))
 
 
 class CoordinatorPort:
@@ -299,11 +417,17 @@ class CoordinatorPort:
               and type(wire["schema_version"]) is int and wire["schema_version"] == 1 and wire["type"] == "PROJECT_COORDINATOR_RESULT"
               and all(wire[k] == v for k, v in bind.items()) and wire["task_tracking"] == p["tracking"], "CONFLICT")
         version, core = wire["core_version"], wire["result"]
+        is_goal = grant.get("request_kind", "QUERY_BLOCKER") == GOAL_KIND
+        task_ref = grant["task"]["task_ref"] if is_goal else p["origin_task_id"]
         check(type(version) is int and 1 <= version <= MAX_INT and isinstance(core, dict)
-              and all(core.get(k) == v for k, v in bind.items()) and core.get("task_ref") == p["origin_task_id"]
+              and all(core.get(k) == v for k, v in bind.items()) and core.get("task_ref") == task_ref
               and wire["core_result_hash"] == _hash(_json(core, 256 * 1024))
               and event_id == "coordinate-" + _hash(_json([grant["coordinator_id"], bind["project_id"], req, bind["job_id"], version])),
               "CONFLICT")
+        if is_goal:
+            check_goal_result(core, p["coordinator_request"], grant)
+        else:
+            check(core.get("kind") != "GOAL_UPDATE" and "goal_state" not in core and "work_key" not in core, "CONFLICT")
         _json(wire)  # Recheck the complete tracked result's 1 MiB limit before persistence.
 
     @asynccontextmanager
