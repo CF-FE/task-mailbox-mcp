@@ -53,7 +53,7 @@ python3 mac/install.py \
 
 `login` 才允许用户浏览器完成本桥自己的 OAuth；原授权 URL 先校验同源 HTTPS 与精确 `/authorize` 路径，再直接交给系统浏览器，不另发库的授权页预检 GET。客户端 SDK 日志只保留级别和异常类型，不渲染认证异常正文、参数或堆栈。不读取 Codex／Kimi 的认证缓存。专用缓存加密保存，目录 `0700`、文件 `0600`；正常运行保留同一 client 的静默 refresh。缺缓存或认证明确拒绝停止该分支，不自动重新登录、DCR、换端点或认证方式。OAuth 路径发现也持久保存，重启不把带前缀 token endpoint 简化为站点根路径。
 
-本桥已完成专用 OAuth 和 whoami 实测，原 nonce 已由 Mac 真实取回、持久入 outbox 并上传；当前桌面会话通过云端 App 读回、核对摘要及 nonce 并确认读取。此前若干尝试的 RemoteProtocolError 不反推为用户拒绝；当前成功也不能推导长期稳定。保留原 job／event，不重新投递；指定 Dot 已报告读取，服务精确 ACK 已直接回读；反方向与持续收件状态见验证记录。
+本桥已完成专用 OAuth 和 whoami 实测，原 nonce 已由 Mac 真实取回、持久入 outbox 并上传；当前桌面会话通过云端 App 读回、核对摘要及 nonce 并确认读取。此前若干尝试的 RemoteProtocolError 不反推为用户拒绝；当前成功也不能推导长期稳定。保留原 job／event，不重新投递；指定云端Dot已报告读取，服务精确 ACK 已直接回读；反方向与持续收件状态见验证记录。
 
 认证发现的两类同源 well-known GET 若在完整响应头前遇到 RemoteProtocolError，每个 client 生命周期最多额外尝试一次，两次共用 10 秒预算。实现固定使用 httpx2 2.16.0 的发送钩子，不替换底层 transport，因此保留环境代理与 TLS；保持原默认不跟随重定向。令牌／注册／refresh／MCP POST、其它 URL、HTTP 错误、超时和响应体错误不走这项重试。既有 outbox 按稳定 event_id 补传的契约不变。
 
@@ -115,9 +115,9 @@ launchctl print "gui/$(id -u)/io.maccoordinationbridge.coordinator"
 
 在服务根运行 `python3 -m unittest discover -s tests -v`。另用桥的独立解释器运行 `tests/smoke_client_transport.py`，9 项固定依赖测试不发外部网络，验证元数据窄重试、代理路由／超时／重定向保留及 OAuth 接合；不能把它加入标准库发现路径。台账／collector fake transport／hook 和安装测试只用标准库、临时目录和本地子进程，不调用外部模型或业务执行器。完整安装的依赖环境与真实 OAuth／工具调用单独验证，当前证据见 [verification.md](../docs/verification.md)。
 
-本机数据库默认 32 MiB、未处理记录／待发报告各 500；VPS 配额保持原值。日志／journal／OAuth 状态／结果暂存另占空间，不自动删历史腾空间。当前无多 Mac claim/fencing、无服务端 stream identity；只允许同一未替换源数据库与单个资源写者。云端插件绑定和 Dot 自动唤醒不由本桥安装推导。
+本机数据库默认 32 MiB、未处理记录／待发报告各 500；VPS 配额保持原值。日志／journal／OAuth 状态／结果暂存另占空间，不自动删历史腾空间。当前无多 Mac claim/fencing、无服务端 stream identity；只允许同一未替换源数据库与单个资源写者。云端插件绑定和云端Dot自动唤醒不由本桥安装推导。
 
-云端 Dot 的 whoami／mailbox_usage 成功已有公子转述的实际调用回报；它不替代本桥授权、nonce 或云端 hook 验收。[官方企业边界](https://learn.chatgpt.com/docs/enterprise/agent-security#hooks-in-local-computer-access-with-work-cloud)仅在 enterprise managed policy 与 remote hooks 启用等条件下支持 Global `requirements.toml` 的管理员远端 `mcp_tool` hook；personal accounts 不适用，本地 command／插件 hook 不支持云编排。本桥不承诺自动唤醒 Dot。
+云端Dot的 whoami／mailbox_usage 成功已有公子转述的实际调用回报；它不替代本桥授权、nonce 或云端 hook 验收。[官方企业边界](https://learn.chatgpt.com/docs/enterprise/agent-security#hooks-in-local-computer-access-with-work-cloud)仅在 enterprise managed policy 与 remote hooks 启用等条件下支持 Global `requirements.toml` 的管理员远端 `mcp_tool` hook；personal accounts 不适用，本地 command／插件 hook 不支持云编排。本桥不承诺自动唤醒云端Dot。
 
 ## 协调员本地签名探针
 
@@ -132,14 +132,20 @@ launchctl print "gui/$(id -u)/io.maccoordinationbridge.coordinator"
      --client-key "$KEY_FILE" --key-id probe-v1
    ```
 
-3. 在批准窗口内沿原 service 启停流程切换唯一 `run`。原锁、原 OAuth 和原 collector 保持单一所有者。只读核原 launchd 与 collector，检查新端口为 `READY`，并用已核私有路径、key ID/文件和真实协调客户端发一次 `probe`，独立核响应签名、protocol=1、scope 和三项操作清单。空 grants 不调用业务操作。健康记录是上次观察，不能替代探针。本机探针不代表 Dot 已读、来源已认证或业务联系成功。
+3. 在批准窗口内沿原 service 启停流程切换唯一 `run`。原锁、原 OAuth 和原 collector 保持单一所有者。只读核原 launchd 与 collector，检查新端口为 `READY`，并用已核私有路径、key ID/文件和真实协调客户端发一次 `probe`，独立核响应签名、protocol=1、scope 和三项操作清单。空 grants 不调用业务操作。健康记录是上次观察，不能替代探针。本机探针不代表云端Dot已读、来源已认证或业务联系成功。
 4. 轮换时用新 client 文件与新 `probe-v2` 重跑准备命令。先用新 key 实测探针，再带原新 key 参数增加 `--retire-probe probe-v1`。旧 key 随后不再受理，旧文件保留在原私有位置由维护方处置。业务 key 及原件证明由宿主任命权威另行配置；探针工具不授业务权限。新配置原子替换后用于后续请求。业务来源字段已被原件冻结，不能用替换证据把旧 job 归给另一个主体。
 5. 撤回时停止原 `run`，确认原进程已退出，备份并移出可选配置，沿原维护入口恢复原版或禁用端口的桥。保留 SQLite、OAuth、未决 outbox 和稳定 ID；本次仅新增关联表，旧逻辑仍可读取旧表。确认原 collector 健康和端口关闭。未知路径或遗留 socket 均拒覆盖；正常退出只清理本次创建的 socket。异常退出后须由宿主核该 socket 的所有者、原进程已消失和原路由，再处置其遗留文件。端口拒绝启动时原 collector 继续运行，端口健康显示 `UNAVAILABLE`。
 
 数据接口、密钥用途、消息签名和拒绝码见 [v1 合同](../SPEC.md#mac-本机协调员端口-v1)。部署前后分别记录固定 Git 提交、安装摘要、原服务状态、本机签名探针和确实获得的远端凭据。
 
+## 单件目标运行准入
+
+`DELEGATE_GOAL` 使用现有签名端口和原 job 的多版本结果，不增加 VPS 工具或桥端执行能力。桥的 `request_kind` grant、协调员的来源授权与精确 pilot、原生运行入口及真实组织工具分别核准；探针成功和旧 `QUERY_BLOCKER` 授权不能替代目标准入。协调员默认保持 `pilot:null`，该字段属于协调员配置，不能添加到桥的 `coordinator-port.json`。
+
+启用前按[单件目标运行准入与撤销](../docs/goal-runtime-admission.md)冻结原件、核对源证明与有效期、检查真实工具范围，最后启用精确 pilot。该说明还区分同 job 的 `UNKNOWN` 对账、明确 `NOT_FOUND` 与泛化读取错误，以及结果进入 outbox 前后的撤销责任。源码、隔离测试或网络恢复均不代替具体单件授权；已持久结果继续沿原 event 补传。
+
 ## 复用原云端检查计划
 
-原计划可预设一件获准的[确定性连通性任务](../SPEC.md#原计划的单件连通性任务)：自然提交冻结的 job/hash，Mac 协调员从上述签名端口读真实 nonce 并持久生成答复，原桥 outbox 自动上传，Dot 等待后读精确版本并 ACK。桥不生成协调员答复，不代理 Dot 的读确认；没有单件 grant 时维持原收件行为。
+原计划可预设一件获准的[确定性连通性任务](../SPEC.md#原计划的单件连通性任务)：自然提交冻结的 job/hash，Mac 协调员从上述签名端口读真实 nonce 并持久生成答复，原桥 outbox 自动上传，云端Dot等待后读精确版本并 ACK。桥不生成协调员答复，不代理云端Dot的读确认；没有单件 grant 时维持原收件行为。
 
-试验前保全原端口配置，仅增加此件专用 key/grant；保持原 endpoint、OAuth、台账、hook、launchd 和游标。协调员处理入口的源码、固定安装和独立处理记录在所属 Herdr 仓维护。试后撤销此件准入、停止该短命处理程序并回读基线；保留已持久报告和证据。VPS 无需为该模式更新或部署 MCP Events。真实状态统一记入 [验证记录](../docs/verification.md)，不能从本机端口测试推定原 Dot 已运行。
+试验前保全原端口配置，仅增加此件专用 key/grant；保持原 endpoint、OAuth、台账、hook、launchd 和游标。协调员处理入口的源码、固定安装和独立处理记录在所属 Herdr 仓维护。试后撤销此件准入、停止该短命处理程序并回读基线；保留已持久报告和证据。VPS 无需为该模式更新或部署 MCP Events。真实状态统一记入 [验证记录](../docs/verification.md)，不能从本机端口测试推定原云端Dot已运行。
