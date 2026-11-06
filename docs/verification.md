@@ -4,11 +4,17 @@
 
 ## 当前状态
 
-最近更新于 2026-11-04（Asia/Shanghai）。本服务代码、文档、配置、Skill、插件和 Issue 的唯一维护仓固定为 `CF-FE/task-mailbox-mcp`，初始基线 `7d162860c10ac2d72719522be7fe01478f4747a3` 保留。其他项目依其原 CF-FE 仓库／Project 任务合同维护；本地目录及部署整合来源不能据以改投个人仓，也不把其他业务统一归入本服务仓。
+最近更新于 2026-11-06（Asia/Shanghai）。本服务代码、文档、配置、Skill、插件和 Issue 的唯一维护仓固定为 `CF-FE/task-mailbox-mcp`，初始基线 `7d162860c10ac2d72719522be7fe01478f4747a3` 保留。其他项目依其原 CF-FE 仓库／Project 任务合同维护；本地目录及部署整合来源不能据以改投个人仓，也不把其他业务统一归入本服务仓。
 
 本轮从个人整合仓固定来源 `9d36feb436264f2c0a065be7e644043a930a98dd` 接回 47 个服务文件，排除个人整合记录 `INTEGRATION.md`／`import-manifest.json`；复制时来源 hash 一致，逐文件基线见 [source-updates.json](source-updates.json)。本页随后进行归属与权限更正，来源记录保留复制时字节。本次接收已提交为 `652406bf09ed589285942293129215d35363a19e`，组织规则增量为 `3add47a`，均已推送本仓；个人整合仓只保留历史部署副本。
 
-当前 Mac 桥运行 [PR #6 合并提交 `95dec8b`](https://github.com/CF-FE/task-mailbox-mcp/commit/95dec8b9cdd6da1d8ab58fdbd2ffca936f64954a)。北京时间 2026-11-04 13:11:30，新 collector 的本机端口就绪，13 份运行文件与合并提交一致，仅 `coordinator_port.py` 需要更换。8 件任务、24 条收件事件、8 份报告和 5 份准入原件保留，业务授权仍为 0。本轮只更新 Mac 桥以识别原目标的可选验收者引用，VPS 无服务改动。
+**2026-11-06，审批子工作流的 Mac 安装和运行接线已采用；自然单待验。** [PR #7](https://github.com/CF-FE/task-mailbox-mcp/pull/7) 已合并到 main，Mac 运行副本采用固定提交 [1b3da867](https://github.com/CF-FE/task-mailbox-mcp/commit/1b3da867b8b1cbda2562667b75b1698c18bee8b9)。14 项文件摘要全部一致，仍仅新增 `approval_hook.py`、更新 `config.py` 与 `codex_hook.py`；原 hooks／plist 定义字节、凭据、允许目录及业务表保留。配套 Herdr PR #15、[PR #16](https://github.com/CF-FE/herdr-4-codexcloud/pull/16) 均已合并，当前固定发布为 `f63e3b8`，原 hook argv 已指向该版本。
+
+受信记录者仍仅绑定当前登记的 `fanren-work`，原 policy 与两个游标保留，提案入口升级未重新绑定或重置 EOF。协调员以 `COORD_APPROVAL_PREPARE` 只提案，原 watcher 登记，未扩大沙箱或给予台账写权。新 watcher 已实际运行 `f63e3b8`，每 60 秒回收完成回合的答复；原 waits、bridge-pump 均加载同一发布且首轮退出码为 0。原收件历史保留，本次未创建审批或测试单。原协调员已确认采用新登记入口，无新采用阻塞，未发测试提案。通知在下一次用户活动出现，真实 UI、自然审批与业务验收仍待自然单。工程证据保留：Herdr 提案入口补丁最终全量 348 项完成、4 项既有跳过；信箱 26 项相关检查沿用原证据，未重跑。
+
+**远端 collector 未随此次本地审批部署恢复。** 升级前已有 `AUTH_FAILED`，原收件进程未运行；本轮保留原 OAuth 状态，未重新认证、启动 collector 或改 VPS 服务。该既有认证问题与本地审批接线分别记录，不以新版文件或本地 watcher 运行代替远端收件成功。
+
+此前 Mac 桥采用 [PR #6 合并提交 `95dec8b`](https://github.com/CF-FE/task-mailbox-mcp/commit/95dec8b9cdd6da1d8ab58fdbd2ffca936f64954a)。北京时间 2026-11-04 13:11:30，新 collector 的本机端口就绪，13 份运行文件与合并提交一致，仅 `coordinator_port.py` 需要更换。8 件任务、24 条收件事件、8 份报告和 5 份准入原件保留，业务授权仍为 0。本轮只更新 Mac 桥以识别原目标的可选验收者引用，VPS 无服务改动。
 
 此前，Mac 桥已于 **2026-11-04 10:48（北京时间）** 升级到 [PR #4 合并提交 `560b9f5`](https://github.com/CF-FE/task-mailbox-mcp/commit/560b9f5de160caf989cfe48d6bc5a83fb0a7bd1a)。13 个运行文件全部匹配该提交。原 launchd 服务已加载新进程，签名端口探针通过，10:48:31 原 collector 完成一次远端轮询（`OK / ROUND_COMPLETE`）。10:49:11 又出现升级前已有的 `NETWORK_FAILED`（`CLIENT_OPEN / RuntimeError`），原因仍为 `UNKNOWN`。10:49:47 本机端口仍就绪。切换前后 8 件任务、24 条收件事件、8 份报告和 5 份已保存原件一致，业务授权及待补传报告均为 0。此次改动位于 Mac 桥，VPS 服务代码无变更。
 
@@ -38,10 +44,10 @@
 | Mac 桥独立安装 | PASS | 独立源码副本、摘要回读、0700 运行目录、0600 配置／钩子定义、实际 SQLite 状态回读及 plist lint；没有启动模型／Herdr／业务 handler |
 | Mac 桥依赖与加密客户端初始化 | PASS | Python 3.13.1 x86_64，FastMCP 4.0.11、MCP 2.3.0、cryptography 48.0.1，共 66 依赖；临时目录中实际构造客户端、私密权限与缺缓存拒绝测试通过，无外部请求 |
 | Codex App 原生钩子触发 | PASS | 公子已信任定义，早期已直接观察SessionStart／PreToolUse／PostToolUse／UserPromptSubmit；本次Lead真实自然Stop又实际将暂存结果入outbox并由collector上送。只覆盖已有证据，不推定七类全覆盖或CLI每类事件均触发 |
-| Mac 桥专用 OAuth | PASS | 公子再次明确要求重新授权后，同一专用客户端完成 token POST 200、后续 MCP 请求 200 及 whoami 成功；保留自有加密缓存，未改代理／TLS／端点。此前尝试的交换状态仍为历史 UNKNOWN |
+| Mac 桥专用 OAuth | PARTIAL | 历史上同一专用客户端取得 token／MCP／whoami 成功回执；当前保留原 collector 的 `AUTH_FAILED`，本次未重新认证，不据历史成功推定当前可用 |
 | Mac 桥真实网络收件／回传 | PASS | collector 实际接收原 JOB_PERSISTED，get_job 核原 ID／payload 摘要；小结果先本地安全保存并入 outbox，再以原 event_id 上传，回执精确匹配 v1／hash。当前桌面会话经云端 App 实际读全并核对原结果后 ACK；无模型／业务派发 |
 | Mac 人工收件窗口 | PASS | 手动运行 120 秒，启动 3 轮；结束时 collector=OK、待处理事件／报告均为 0，进程已自然退出。只证明此短窗口，不提升为长期在线 |
-| Mac 持续收件进程 | PASS | 公子明确授权推进后，用户 launchd 已 bootstrap；RunAtLoad=true、KeepAlive=false，原生回读 running／PID 及新的 collector=OK 成功时点。网络错误由进程内退避，认证／协议错误停止；没有异常退出自动重启或长期稳定性验收 |
+| Mac 持续收件进程 | FAIL | 本轮核对原收件进程未运行，保留既有 `AUTH_FAILED`；原单元仍为 `RunAtLoad=true / KeepAlive=false`，本次未启动。此前的 running／collector=OK 仅保留为历史回执 |
 | CF-FE 原 GitHub 连接写入 | PASS | 同一原连接实际创建并独立回读 CF-FE/task-mailbox-mcp Issue #1，关联原正式总览后回读 Repository=CF-FE/task-mailbox-mcp、Status=In Progress；未改 OAuth 权限或换凭据。个人整合仓403不推广为CF-FE授权故障 |
 | 信箱自动消费／无人值守业务派发 | NOT_RUN | 信箱／桥没有执行能力；独立[Lead显式Mac适配器](https://github.com/CF-FE/herdr-4-codexcloud/blob/main/docs/herdr-executor.md)已取得首版限定执行／回传工程验收，生产业务仍未验 |
 
