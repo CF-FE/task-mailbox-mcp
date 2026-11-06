@@ -35,7 +35,32 @@ python3 mac/install.py \
 
 安装器独立复制源码，记录摘要和版本，生成权限 `0600` 的私密配置、Codex hooks.json 及 launchd 单元；保留其它 hook，修改已有 hook 前保存私密备份。它**不授予 hook trust、不启动 launchd、不登录 OAuth**。同一运行目录不允许静默更换源身份或监测范围。
 
-在 Codex 设置的“钩子”或原生 `/hooks` 中审阅新定义并信任精确当前版本。钩子只使用本机 SQLite，超时 3 秒；SessionStart／UserPromptSubmit 的附加上下文只含固定提示、关联 ID／hash 和计数。[官方钩子规则](https://learn.chatgpt.com/docs/hooks#review-and-trust-hooks)
+在 Codex 设置的“钩子”或原生 `/hooks` 中审阅新定义并信任精确当前版本。默认钩子只使用本机 SQLite，超时 3 秒；SessionStart／UserPromptSubmit 的附加上下文只含固定提示、关联 ID／hash 和计数；下面的审批进程接口须另行显式配置。[官方钩子规则](https://learn.chatgpt.com/docs/hooks#review-and-trust-hooks)
+
+### 可选的原生审批接线
+
+2026-11-06 源码候选沿公子批准的审批修复，允许原 hook 调用一个明确配置的 Herdr 固定发布进程接口。默认关闭；未切换生产 hook、服务或现有任务。VPS、信箱 job 协议及本桥的任务／执行分离保持原合同。
+
+私有 `config.json` 可选增加以下字段；实际路径、原生会话与审批者均由 operator 核实，不从任务正文取得：
+
+```json
+{
+  "approval_workflow": {
+    "argv": ["/absolute/python3", "-I", "-B", "/fixed/release/scripts/coordinator_approval_hook.py", "--state-dir", "/private/coordinator/state", "--policy", "/private/coordinator/native-approval-policy.json"],
+    "timeout_seconds": 2.2
+  }
+}
+```
+
+该固定接口只收 `session_id/turn_id/cwd/transcript_path/hook_event_name` 五个原生关联字段；不转发或采集 prompt、用户答复、最后消息或工具正文，不使用 shell、不导入另一仓源码、不直接打开协调数据库，也不补造无信箱审批的 job。配置启用时必须属于当前账户且私有；可选字段错误只禁用审批接线，原收发、counts 和 Stop 报告保留。
+
+`SessionStart`／`UserPromptSubmit` 可将已绑定待办摘要输出为 `systemMessage`（UI／事件流 warning）并将索引加入 `additionalContext`。**通知依赖下一次相应用户活动，不唤醒闲置窗口，不保证即时通知。** 输出成功仅为准备／受理，不能写成用户已收到或已批准。待办投递意图与去重由 Herdr 原台账负责，本桥不建立第二份审批状态。
+
+答复由 operator 明确绑定的原主会话记录者确认公子正常答复后，沿原生引用出具独立回执。Herdr 从原生分页历史核来源、范围及引用后导入；本桥从不扫描 `role=user` 或正文“批准”。Stop 可触发收件；若当时原回合尚未完成或读取暂失败，**既有 Herdr watcher 的下一轮继续读取同一绑定和游标**，无需公子再发消息。共享项目观察与信箱原回填不被收件异常压住。
+
+部署前按 [Herdr 配套候选的绑定与升级指引（PR #15）](https://github.com/CF-FE/herdr-4-codexcloud/pull/15)核准固定发布、源 policy、EOF 游标、记录者与原 watcher。两仓分别固定版本，先在临时副本核进程接口，再按原主会话审阅结果采用。安装器仍拒绝静默覆盖已有配置；保留启用后的私有字段并显式对账，不通过重装丢失原绑定。回退时撤销本可选字段并恢复原固定发布，保全协调台账与游标；不要回滚抹掉已获得的决定或实际效果。真实 UI 显示、自然答复回流和原执行验收仍逐项取证，不发审批测试单。
+
+本轮 26 项相关 hook／runtime 检查通过，真实两仓 CLI 与临时 SQLite／只读原生 API fixture 的进程联调通过；一条正常答复在原 watcher 操作中导入，原工作流节点接续且重放不生成新动作。本机原主会话的原生只读 probe 由 Herdr 侧另核通过，以上均不代表已部署或真实用户 UI 已送达。
 
 本机实测 `hooks stable true`，未自定义 `CODEX_HOME`，有效定义为 `~/.codex/hooks.json`；同一 Codex host 的 App／CLI 共享这套配置。首次安装后，公子完成对应定义的审阅信任，已观察 SessionStart／PreToolUse／PostToolUse／UserPromptSubmit 四类 App 事件。目录迁移后，公子已再次确认新定义信任，主执行侧直接回读迁移前快照之后新增的 PreToolUse／PostToolUse，确认来自当前会话与新运行路径。没有运行 CLI 模型 turn，不能由配置共享宣称 CLI 的原生触发已验收；其余事件也须各自取得回执。
 
