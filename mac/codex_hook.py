@@ -11,6 +11,7 @@ import sqlite3
 import sys
 
 from config import DEFAULT_CONFIG, in_scope, load_config, open_store
+from approval_hook import run_approval_hook
 from tracking import hook_tracking_view
 
 
@@ -33,6 +34,7 @@ def handle_hook(config, event, store):
     observed = store.record_hook(event)
     name = event.get('hook_event_name')
     binding = observed.get('binding')
+    approval = run_approval_hook(config, event)
     if name == 'Stop' and binding:
         path = draft_path(config, event['session_id'])
         with draft_lock(config):
@@ -68,7 +70,14 @@ def handle_hook(config, event, store):
         numeric = {k: v for k, v in counts.items() if isinstance(v, int) and not isinstance(v, bool)}
         if numeric:
             text += ' 台账计数=' + json.dumps(numeric, sort_keys=True, separators=(',', ':')) + '。'
-        return {'hookSpecificOutput': {'hookEventName': name, 'additionalContext': text}}
+        if config.get('approval_workflow_error') == 'OPTIONAL_APPROVAL_DISABLED':
+            text += ' 审批接线=OPTIONAL_APPROVAL_DISABLED；原信箱和待办保留，由原协调员核配置。'
+        if approval.get('additional_context'):
+            text += '\n' + approval['additional_context']
+        output = {'hookSpecificOutput': {'hookEventName': name, 'additionalContext': text}}
+        if approval.get('system_message'):
+            output['systemMessage'] = approval['system_message']
+        return output
     return {}
 
 
