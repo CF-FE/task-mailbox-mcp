@@ -117,6 +117,7 @@ def test_platform(engine, store):
                         "token_sha256": hashlib.sha256(SOURCE_TOKEN.encode()).hexdigest()},
             "agent": {"projects": ["project"], "entity_types": ["task", "role", "blocker", "workflow", "delegation"],
                       "mcp_login": "agent"},
+            "private-other": {"projects": ["other"], "entity_types": ["task"], "mcp_login": "unrelated"},
             "peer": {"projects": ["project"], "entity_types": ["task", "blocker"],
                      "authorities": ["native_observation"]},
         },
@@ -140,7 +141,10 @@ def test_platform(engine, store):
                               authority="owner_decision"),
                   observation("role", "role", "worker", {"kind": "worker"}, task_id="task"),
                   observation("flow", "workflow", "run", {"kind": "observed", "nodes": [
-                      {"id": "one", "label": "One"}]}, task_id="task"),
+                      {"id": "one", "label": "One", "measured_duration_seconds": 4.026718375,
+                       "measured_duration_basis": "Wrapper monotonic elapsed",
+                       "evidence": [{"source_type": "synthetic", "ref": "evidence:timer", "observed_at": None,
+                                     "authority": "native_observation", "digest": "a" * 64}]}]}, task_id="task"),
                   observation("block", "blocker", "block", {"state": "OPEN"}, task_id="task"),
                   observation("delegation", "delegation", "handoff", {"from_role_id": "owner"},
                               task_id="task"))
@@ -199,7 +203,15 @@ def test_platform(engine, store):
         assert initial["data"]["accepted_count"] == 1 and initial["data"]["blocked_count"] == 1
         session_cookie = client.cookies.get(access.cookie)
         assert client.get(API + "/projects/project/roles").json()["data"][0]["kind"] == "worker"
-        assert client.get(API + "/workflows/run").json()["data"]["nodes"][0]["id"] == "one"
+        node = client.get(API + "/workflows/run").json()["data"]["nodes"][0]
+        assert node["id"] == "one" and node["measured_duration_seconds"] == 4.026718375
+        assert node["measured_duration_basis"] == "Wrapper monotonic elapsed"
+        assert node["started_at"] is None and node["finished_at"] is None
+        assert node["evidence"][0]["digest"] == "a" * 64
+        assert client.post(API + "/observations/batches", headers=headers, json=batch(
+            "unverified-measurement", observation("bad-timer", "workflow", "run", {"kind": "observed",
+                "nodes": [{"id": "n", "label": "N", "measured_duration_seconds": 4,
+                           "measured_duration_basis": "Unverified"}]}))).status_code == 403
         assert client.get(API + "/projects/project/blockers").json()["data"][0]["task_id"] == "task"
         assert client.post(API + "/observations/batches", headers=headers, json=batch(
             "later", observation("older", values={"title": "Older"}, source_revision=37),
@@ -236,7 +248,10 @@ def test_platform(engine, store):
                 assert int((await anext(response.aiter_lines())).removeprefix("id: ")) == int(first_id) + 1
         async with Client(endpoint, auth="legacy-token") as legacy:
             assert {tool.name for tool in await legacy.list_tools()} == LEGACY | PLATFORM
-            assert (await legacy.call_tool("whoami")).data["github_login"] == "legacy"
+            identity = (await legacy.call_tool("whoami")).data
+            assert identity["github_login"] == "legacy" and identity["subject"] == "42"
+            assert identity["service"] == "task-mailbox" and identity["execution_enabled"] is False
+            assert identity["platform_access"] == {"allowed_projects": ["project"], "reporting_sources": []}
             assert (await legacy.call_tool("mailbox_usage")).data["usage_schema_version"] == 2
             assert (await legacy.call_tool("get_job", {"job_id": "historical"})).data["job_id"] == "historical"
             assert (await legacy.call_tool("list_events", {"cursor": 90})).data["events"][0]["cursor"] == 91
@@ -251,6 +266,13 @@ def test_platform(engine, store):
             assert (await legacy.call_tool("ack_result_read", {"job_id": "mcp-test", "event_id": "mcp-ack",
                     "result_hash": result["result_hash"], "version": 1})).data["event_type"] == "RESULT_READ_ACKNOWLEDGED"
         async with Client(endpoint, auth="agent-token") as agent:
+            identity = (await agent.call_tool("whoami")).data
+            assert identity["platform_access"] == {
+                "allowed_projects": ["project"],
+                "reporting_sources": [{"source_id": "agent", "projects": ["project"],
+                                       "entity_types": ["blocker", "delegation", "role", "task", "workflow"],
+                                       "authorities": ["self_report"]}],
+            }
             assert (await agent.call_tool("get_job", {"job_id": "historical"}, raise_on_error=False)).is_error
             args = {"batch": batch("self", observation("report", values={
                 "title": "Self", "reported_status": "REPORTED_COMPLETED", "current_handler_role_id": "fake",

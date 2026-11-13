@@ -224,6 +224,21 @@ def backend_contract():
             "publish_observation_batch": ["batch"],
             "get_observation_receipt": ["batch_id", "source_id"],
         },
+        "whoami_platform_access": {
+            "available_in": "PostgreSQL mode as an additive field on whoami",
+            "allowed_projects": "List of project IDs readable by the authenticated GitHub login",
+            "reporting_sources": "Only matching MCP grants, each with source_id, projects, entity_types, authorities",
+        },
+        "role_activity_merge": (
+            "For native role activity with the same nonempty session_ref and equal binding_id (including both null), "
+            "prefer the latest explicit last_observed_at for observed_state, latest_action, and "
+            "last_observed_at. Conflicting different sessions or bindings remain unknown."
+        ),
+        "workflow_measurement": (
+            "measured_duration_seconds and measured_duration_basis are optional together, "
+            "require native evidence for the observed run and node, and describe only that node. "
+            "Keep original timestamps and use their interval when a measurement is unavailable."
+        ),
         "pagination": "pass next_cursor to cursor on the same query; default 50 and maximum 200",
         "sse": {"event": "observation", "data_schema": "EventHint", "resume": "Last-Event-ID or after"},
         "observation_payload_schemas": {

@@ -22,6 +22,7 @@ TASK_AUTHORITY = {
     "followup_ref": "native_observation",
 }
 SELF_REPORT_FIELDS = {"title", "reported_status"}
+ROLE_ACTIVITY_FIELDS = {"observed_state", "latest_action", "last_observed_at"}
 
 
 def integer_cursor(value):
@@ -111,6 +112,15 @@ class Observations:
                 for field, authority in TASK_AUTHORITY.items():
                     if body["payload"].get(field) not in (None, "UNKNOWN") and authority not in authorities:
                         raise APIError(403, "AUTHORITY_FORBIDDEN", f"{field} requires matching evidence authority")
+            if event.entity_type == "workflow":
+                for node in body["payload"].get("nodes", []):
+                    if node.get("measured_duration_seconds") is None:
+                        continue
+                    if ("native_observation" not in authorities or
+                            body["payload"].get("kind") != "observed" or
+                            not any(item["authority"] == "native_observation" for item in node.get("evidence", []))):
+                        raise APIError(403, "AUTHORITY_FORBIDDEN",
+                                       "Node measurements require native observation of the run and node")
             # PostgreSQL JSONB cannot represent embedded U+0000 or invalid Unicode.
             try:
                 encoded = _json(body)
@@ -235,6 +245,30 @@ class Observations:
 
     @staticmethod
     def _merge(rows):
+        role_activity = {}
+        for row in rows:
+            if row.entity_type != "role":
+                continue
+            body = row.body
+            payload = body["payload"]
+            authorities = {item["authority"] for item in body["evidence"]}
+            if not ROLE_ACTIVITY_FIELDS.intersection(payload) or not authorities - {"self_report"}:
+                continue
+            role = row.project_id, row.entity_id
+            session, binding = payload.get("session_ref"), payload.get("binding_id")
+            observed = payload.get("last_observed_at")
+            if "native_observation" not in authorities or not (session and observed):
+                role_activity.setdefault(role, []).append(None)
+            else:
+                role_activity.setdefault(role, []).append(
+                    (session, binding, datetime.fromisoformat(observed)))
+
+        # Use explicit activity time only when all contributing observations identify
+        # the same session and binding. The normal conflict rule covers other roles.
+        comparable_roles = {
+            role for role, observations in role_activity.items()
+            if None not in observations and len({item[:2] for item in observations}) == 1
+        }
         groups = {}
         for row in rows:
             fields, strengths, conflicts, evidence, last = groups.setdefault(
@@ -257,8 +291,12 @@ class Observations:
                     (PRIORITY[item] for item in authorities if item != "formal_record"), default=0)
                 if key == "reported_status":
                     score = int("self_report" in authorities)
-                rank = (score, value is not None)
-                previous = strengths.get(key, (-1, False))
+                activity_time = datetime.min.replace(tzinfo=timezone.utc)
+                if (row.entity_type == "role" and key in ROLE_ACTIVITY_FIELDS and
+                        (row.project_id, row.entity_id) in comparable_roles):
+                    activity_time = datetime.fromisoformat(body["payload"]["last_observed_at"])
+                rank = (score, activity_time, value is not None)
+                previous = strengths.get(key, (-1, activity_time, False))
                 if rank > previous:
                     strengths[key], fields[key] = rank, value
                     conflicts.discard(key)

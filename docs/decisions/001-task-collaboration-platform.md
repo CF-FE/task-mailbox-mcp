@@ -44,7 +44,7 @@
 | 界面与服务数据 | **Tailwind CSS + shadcn/ui + TanStack Query 5** | 统一表格、筛选、表单及服务端状态缓存 |
 | 关系／工作流图 | **React Flow** | 展示角色委派和节点运行；后续支持关系编辑，运行事实和配置草图分别展示 |
 | 实时更新 | **HTTP 查询 + SSE** | 首次取快照，随后推送已提交事件；操作使用普通 HTTP 请求 |
-| 部署 | VPS 的现有 **Caddy + systemd**；win-work 的 PostgreSQL 服务 | 沿用现有公网入口、MCP 地址及 OAuth 状态，增加一条受限私网数据库连接 |
+| 部署 | VPS 的既有 HTTPS 入口和 systemd；win-work 的 PostgreSQL 服务 | 复用现有入口、MCP 地址及 OAuth 状态，增加一条受限私网数据库连接 |
 | 验证 | 原 unittest／MCP smoke；新增 PostgreSQL 集成检查与 **Playwright** | 验证既有收发和新页面的真实结果，不只检查界面是否能打开 |
 
 以上是依赖系列选择，实施时生成并验证锁定文件。首期用 PostgreSQL 表、索引和事务完成需求，无需另建消息总线、图数据库或独立调度平台。[PostgreSQL JSONB](https://www.postgresql.org/docs/current/datatype-json.html)、[Windows 安装](https://www.postgresql.org/download/windows/)、[SQLAlchemy](https://docs.sqlalchemy.org/en/21/)、[Alembic](https://alembic.sqlalchemy.org/en/latest/)、[React Flow](https://reactflow.dev/)、[TanStack Query](https://tanstack.com/query/latest/docs/framework/react/overview)。
@@ -76,6 +76,8 @@ flowchart LR
 win-work 不可达时，中心接口返回明确的存储暂不可用；Mac 原桥本地观察和待上传继续按既有额度落盘，恢复后按原 ID 补传。已经打开的页面可保留客户端缓存并标明陈旧，新访问显示暂不可用，不另建离线查询库。SSE 每次查询使用短事务，不让浏览器订阅长期占用数据库连接。新增 Web/API 的负载通过有限分页和连接池控制，沿用现有服务资源限制，验收时测实际占用。
 
 VPS 首期使用单个 ASGI 应用进程承载 HTTP 和 MCP，复用原认证的单写者约束；按 FastMCP 的挂载方式组合生命周期，保留原 PublicPrefix、OAuth discovery、callback 和 MCP 路由，分别做入口回归。[FastMCP 官方 HTTP／FastAPI 集成文档](https://github.com/PrefectHQ/fastmcp/blob/main/docs/deployment/http.mdx)
+
+现场核对后以既有 HTTPS 入口为部署依据。Web 构建由同一 ASGI 应用通过 `TASK_PLATFORM_UI_ROOT` 静态挂载到 `/mailbox/ui/`，沿原前缀接入 API、SSE 与 OAuth。部署沿现有 systemd 单元完成，不新增代理或前端进程。执行顺序及实际结果见[部署说明](../deployment.md#协作平台切换到-postgresql)和[验证记录](../verification/postgres-platform.md)。
 
 ## 统一数据模型与事实来源
 

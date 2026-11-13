@@ -85,10 +85,25 @@ class Access:
     def viewer_projects(self, login):
         return self.policy.viewers.get(login.casefold(), set()) if isinstance(login, str) else set()
 
+    def mcp_access(self, login):
+        return {
+            "allowed_projects": sorted(self.viewer_projects(login)),
+            "reporting_sources": [
+                {"source_id": source_id, "projects": sorted(grant.projects),
+                 "entity_types": sorted(grant.entity_types), "authorities": sorted(grant.authorities)}
+                for source_id, grant in sorted(self.policy.sources.items())
+                if self._matches_mcp_login(grant, login)
+            ],
+        }
+
+    @staticmethod
+    def _matches_mcp_login(grant, login):
+        return bool(grant and grant.mcp_login and isinstance(login, str)
+                    and grant.mcp_login.casefold() == login.casefold())
+
     def mcp_source(self, login, source_id):
         grant = self.policy.sources.get(source_id) if isinstance(source_id, str) else None
-        if (grant is None or not grant.mcp_login or not isinstance(login, str)
-                or grant.mcp_login.casefold() != login.casefold()):
+        if not self._matches_mcp_login(grant, login):
             raise APIError(403, "SOURCE_FORBIDDEN", "No source grant for this account")
         return AuthorizedSource(source_id, grant)
 

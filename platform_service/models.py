@@ -108,7 +108,17 @@ class WorkflowNode(DTO):
     started_at: Stamp | None = None
     finished_at: Stamp | None = None
     wait_started_at: Stamp | None = None
+    measured_duration_seconds: Annotated[float, Field(ge=0, strict=True, allow_inf_nan=False)] | None = None
+    measured_duration_basis: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1,
+                                                               max_length=2048)] | None = None
     evidence: list[Evidence] = Field(default_factory=list)
+
+
+    @model_validator(mode="after")
+    def measurement(self):
+        if (self.measured_duration_seconds is None) != (self.measured_duration_basis is None):
+            raise ValueError("node measurement requires both duration and basis")
+        return self
 
 
 class WorkflowEdge(DTO):

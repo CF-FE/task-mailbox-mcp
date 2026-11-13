@@ -37,6 +37,14 @@ python3 mac/install.py \
 
 在 Codex 设置的“钩子”或原生 `/hooks` 中审阅新定义并信任精确当前版本。默认钩子只使用本机 SQLite，超时 3 秒；SessionStart／UserPromptSubmit 的附加上下文只含固定提示、关联 ID／hash 和计数；下面的审批进程接口须另行显式配置。[官方钩子规则](https://learn.chatgpt.com/docs/hooks#review-and-trust-hooks)
 
+### 可选的协作平台观测
+
+沿既有桥的固定源码、运行目录和启动项升级。安装时可追加 `--observation-settings <PRIVATE_JSON_FILE>`，将配置写入原状态目录的 `observations.json`。配置与 `token_file` 指向的来源令牌文件须为当前用户所有的私有普通文件。观测使用独立来源授权，保留原桥 OAuth、收件游标及待报数据。
+
+配置 `schema_version: 1`、HTTPS `api_base`（如 `https://mcp.example.com/mailbox/api/v1`）、`source_id`、`project_id`、绝对 `token_file` 和 `jobs`。每条 job 映射由已知 job ID 指向 `task_id`。可选 `sessions` 只列已核的准确原生 session ID，每条填 `role_id`、`role_kind` 和绝对 `cwd`，有证据时再填 `role_binding_id`、`task_id`。采集时同时匹配 session ID 和工作目录。原桥显式绑定与观测映射不一致时，保留原绑定，避免将活动归到错误任务。
+
+观测钩子仅本机写入独立、有界的 `observations.sqlite3`。原 collector 在同一进程内独立调度观测上传与信箱收发，正常观测轮后约 5 秒，原信箱 30 秒节奏不变。结果未知时沿原批次查询回执，确认持久化后回收对应缓冲。沿原启动项核对版本与钩子信任，验收分别记录真实 hook 捕获、原批次回执和平台回读。新增观测未取证前，保留相应来源状态未知。
+
 ### 可选的原生审批接线
 
 2026-11-06，[PR #7](https://github.com/CF-FE/task-mailbox-mcp/pull/7) 已合并到 main，Mac 安装和运行接线已采用固定版本 `1b3da867`，配套 Herdr 已采用 PR #16 的 `f63e3b8`；自然单待验。该能力默认关闭，本机已按明确绑定启用，原 hook／plist 定义保留。VPS、信箱 job 协议及任务／执行分离保持原合同。原远端 collector 的既有 `AUTH_FAILED` 未在本轮修复或重启，详见[当前验证记录](../docs/verification.md#当前状态)。

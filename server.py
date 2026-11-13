@@ -29,15 +29,19 @@ class StorageStartupError(RuntimeError):
 
 
 class AccountGuard(Middleware):
-    def __init__(self, allowed_login, platform_enabled=False):
+    def __init__(self, allowed_login, access=None):
         self.allowed_login = allowed_login.casefold()
-        self.platform_enabled = platform_enabled
+        self.access = access
 
     async def on_call_tool(self, context, call_next):
         token = get_access_token()
         login = (token.claims or {}).get("login") if token else None
-        if self.platform_enabled and context.message.name in PLATFORM_TOOLS:
-            return await call_next(context)
+        name = context.message.name
+        if self.access is not None:
+            if name in PLATFORM_TOOLS:
+                return await call_next(context)
+            if name == "whoami" and any(self.access.mcp_access(login).values()):
+                return await call_next(context)
         if not isinstance(login, str) or login.casefold() != self.allowed_login:
             raise ToolError("AUTHORIZATION_DENIED: this account cannot access the mailbox")
         return await call_next(context)
@@ -57,7 +61,8 @@ def create_server(store, auth, allowed_login, platform=None):
         auth=auth,
         mask_error_details=True,
     )
-    server.add_middleware(AccountGuard(allowed_login, platform is not None))
+    access = platform[1] if platform is not None else None
+    server.add_middleware(AccountGuard(allowed_login, access))
     storage_errors = (sqlite3.Error,)
     if platform is not None:
         from sqlalchemy.exc import SQLAlchemyError
@@ -84,8 +89,12 @@ def create_server(store, auth, allowed_login, platform=None):
     def whoami() -> dict:
         """Return the authenticated account, not a caller-supplied sender alias."""
         token = get_access_token()
-        return {"github_login": token.claims["login"], "subject": token.subject,
-                "service": "task-mailbox", "execution_enabled": False}
+        login = token.claims["login"]
+        identity = {"github_login": login, "subject": token.subject,
+                    "service": "task-mailbox", "execution_enabled": False}
+        if access is not None:
+            identity["platform_access"] = access.mcp_access(login)
+        return identity
 
     @server.tool(annotations=write)
     def submit_job(job_id: str, payload: dict, payload_hash: str) -> dict:
