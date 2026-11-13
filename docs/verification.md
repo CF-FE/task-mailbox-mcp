@@ -4,7 +4,13 @@
 
 ## 当前状态
 
-最近更新于 2026-11-06（Asia/Shanghai）。本服务代码、文档、配置、Skill、插件和 Issue 的唯一维护仓固定为 `CF-FE/task-mailbox-mcp`，初始基线 `7d162860c10ac2d72719522be7fe01478f4747a3` 保留。其他项目依其原 CF-FE 仓库／Project 任务合同维护；本地目录及部署整合来源不能据以改投个人仓，也不把其他业务统一归入本服务仓。
+2026-11-14（Asia/Shanghai），协作平台已切换到统一 Win PostgreSQL，原信箱数据逐表核对通过。真实 Web OAuth、原 Mac 信箱网络认证、端到端 P95 和 Cloud 路由业务活动仍待验证。最新证据见[协作平台首期验证](verification/platform-v1.md)，数据库部署前置见 [PostgreSQL T1 验证](verification/postgres-platform.md)。
+
+## 历史记录（截至 2026-11-06）
+
+本节及后续历史章节保留原信箱、Mac 桥和审批接线当时的运行与验收证据。运行状态以各自记录日期为准。
+
+截至 2026-11-06（Asia/Shanghai），本服务代码、文档、配置、Skill、插件和 Issue 的唯一维护仓固定为 `CF-FE/task-mailbox-mcp`，初始基线 `7d162860c10ac2d72719522be7fe01478f4747a3` 保留。其他项目依其原 CF-FE 仓库／Project 任务合同维护；本地目录及部署整合来源不能据以改投个人仓，也不把其他业务统一归入本服务仓。
 
 本轮从个人整合仓固定来源 `9d36feb436264f2c0a065be7e644043a930a98dd` 接回 47 个服务文件，排除个人整合记录 `INTEGRATION.md`／`import-manifest.json`；复制时来源 hash 一致，逐文件基线见 [source-updates.json](source-updates.json)。本页随后进行归属与权限更正，来源记录保留复制时字节。本次接收已提交为 `652406bf09ed589285942293129215d35363a19e`，组织规则增量为 `3add47a`，均已推送本仓；个人整合仓只保留历史部署副本。
 
