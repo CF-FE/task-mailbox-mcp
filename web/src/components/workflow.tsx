@@ -20,6 +20,7 @@ function StepCard({ data, selected }: NodeProps<StepNode>) {
 }
 
 const nodeTypes = { step: StepCard }
+const measuredSecondsFormat = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 9, useGrouping: false })
 
 function layout(run: Run) {
   const incoming = new Map(run.nodes.map(({ id }) => [id, 0]))
@@ -70,6 +71,11 @@ function Graph({ run }: { run: Run }) {
   const [selectedId, setSelectedId] = useState<string>()
   const { nodes, edges, cyclic, incomplete } = useMemo(() => layout(run), [run])
   const selected = run.nodes.find((node) => node.id === selectedId)
+  const measurement = run.kind === "observed" && selected?.measured_duration_seconds != null &&
+    selected.measured_duration_basis && run.evidence.some((item) => item.authority === "native_observation") &&
+    selected.evidence.some((item) => item.authority === "native_observation")
+    ? { seconds: selected.measured_duration_seconds, basis: selected.measured_duration_basis }
+    : null
   const selectedNodes = useMemo(() => nodes.map((node) => ({ ...node, selected: node.id === selectedId })), [nodes, selectedId])
 
   return <>
@@ -113,7 +119,13 @@ function Graph({ run }: { run: Run }) {
           <div><dt className="muted">开始时间</dt><dd>{time(selected.started_at)}</dd></div>
           <div><dt className="muted">结束时间</dt><dd>{time(selected.finished_at)}</dd></div>
           <div><dt className="muted">等待开始</dt><dd>{time(selected.wait_started_at)}</dd></div>
-          <div><dt className="muted">执行耗时</dt><dd>{elapsed(interval(selected.started_at, selected.finished_at))}</dd></div>
+          <div>
+            <dt className="muted">{!measurement ? "执行耗时" : "实测耗时"}</dt>
+            <dd>{!measurement ? elapsed(interval(selected.started_at, selected.finished_at)) : `${measuredSecondsFormat.format(measurement.seconds)} 秒`}</dd>
+          </div>
+          {measurement && <div className="col-span-full">
+            <dt className="muted">测量范围</dt><dd>{measurement.basis}</dd>
+          </div>}
         </dl>
         <p className="text-sm"><span className="muted mr-2">上游依赖</span>{run.edges.filter((edge) => edge.target === selected.id).map((edge) => run.nodes.find((step) => step.id === edge.source)?.label ?? "节点未知").join("、") || "来源未记录"}</p>
         <details className="text-sm"><summary className="cursor-pointer text-primary">节点证据</summary><EvidenceList items={selected.evidence} /></details>

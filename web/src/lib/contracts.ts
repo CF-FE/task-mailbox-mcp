@@ -149,6 +149,8 @@ export const stepSchema = z.object({
   started_at: time,
   finished_at: time,
   wait_started_at: time,
+  measured_duration_seconds: seconds,
+  measured_duration_basis: z.string().trim().min(1).max(2048).nullish(),
   evidence,
 })
 export type Step = z.infer<typeof stepSchema>

@@ -56,7 +56,8 @@ def atomic_private(path, content):
             os.unlink(temporary)
 
 
-def install(runtime, state, endpoint, roots, hook_file, launch_file, source_commit, start_at_login=False):
+def install(runtime, state, endpoint, roots, hook_file, launch_file, source_commit, start_at_login=False,
+            observation_settings=None):
     if not isinstance(start_at_login, bool):
         raise ValueError('start_at_login must be boolean')
     os.umask(0o077)
@@ -71,6 +72,14 @@ def install(runtime, state, endpoint, roots, hook_file, launch_file, source_comm
               'allowed_roots': [str(Path(p).resolve()) for p in roots]}
     # Validate without replacing any existing runtime configuration.
     state.mkdir(parents=True, exist_ok=True, mode=0o700)
+    from observability import SETTINGS_NAME, load_settings
+    monitor_path = state / SETTINGS_NAME
+    monitor_content = None
+    if observation_settings is not None:
+        settings = load_settings(Path(observation_settings))
+        if os.path.lexists(monitor_path) and load_settings(monitor_path) != settings:
+            raise ValueError('existing observation settings differ; reconcile before replacing')
+        monitor_content = (json.dumps(settings, ensure_ascii=False, indent=2) + '\n').encode()
     with tempfile.TemporaryDirectory() as temporary:
         test_config = Path(temporary) / 'config.json'
         test_config.write_text(json.dumps(config))
@@ -113,6 +122,8 @@ def install(runtime, state, endpoint, roots, hook_file, launch_file, source_comm
         atomic_private(backup, hook_file.read_bytes())
     atomic_private(hook_file, (json.dumps(hook_config, ensure_ascii=False, indent=2) + '\n').encode())
     atomic_private(launch_file, plistlib.dumps(plist))
+    if monitor_content is not None and not os.path.lexists(monitor_path):
+        atomic_private(monitor_path, monitor_content)
     receipt = {'source_commit': source_commit, 'files': files, 'execution_enabled': False,
                'scope_roots': config['allowed_roots'], 'hooks': 'INSTALLED_REVIEW_REQUIRED',
                'launch_agent': 'PREPARED_NOT_BOOTSTRAPPED', 'start_at_login': plist['RunAtLoad'],
@@ -134,10 +145,11 @@ def main():
     parser.add_argument('--source-commit', required=True)
     parser.add_argument('--start-at-login', action='store_true',
                         help='enable RunAtLoad in the prepared unit; does not load or start it')
+    parser.add_argument('--observation-settings', help='install an optional private source configuration without loading it')
     args = parser.parse_args()
     print(json.dumps(install(args.runtime_dir, args.state_dir, args.endpoint, args.allowed_root,
                              args.hook_file, args.launch_agent, args.source_commit,
-                             start_at_login=args.start_at_login), ensure_ascii=False))
+                             start_at_login=args.start_at_login, observation_settings=args.observation_settings), ensure_ascii=False))
 
 
 if __name__ == '__main__':

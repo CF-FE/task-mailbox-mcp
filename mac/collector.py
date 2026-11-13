@@ -338,7 +338,28 @@ async def collect_once(store, call_tool, *, limits=Limits(), first_lane="inbox",
 
 
 async def run_collector(store, client_factory, stop_event, *, limits=Limits(), interval=30, port=None):
-    """Run bounded rounds. The CLI owns signal handlers and the one-writer lock."""
+    """Run mailbox and optional monitoring with independent request budgets."""
+    if __package__:
+        from .observability import SETTINGS_NAME, run_monitor
+    else:
+        from observability import SETTINGS_NAME, run_monitor
+
+    path = getattr(store, 'path', None)
+    state_dir = Path(path).parent if path is not None else None
+    if state_dir is None or not os.path.lexists(state_dir / SETTINGS_NAME):
+        return await _run_mailbox(store, client_factory, stop_event, limits=limits, interval=interval, port=port)
+    monitor = asyncio.create_task(run_monitor(state_dir, stop_event))
+    try:
+        await _run_mailbox(store, client_factory, stop_event, limits=limits, interval=interval, port=port)
+        if not stop_event.is_set():
+            # Mailbox authorization/protocol stop leaves the independent source alive.
+            await stop_event.wait()
+    finally:
+        monitor.cancel()
+        await asyncio.gather(monitor, return_exceptions=True)
+
+
+async def _run_mailbox(store, client_factory, stop_event, *, limits, interval, port):
     if not isinstance(interval, (int, float)) or isinstance(interval, bool) or not math.isfinite(interval) or not 1 <= interval <= 3600:
         raise ValueError("invalid polling interval")
     failures, first_lane = 0, "inbox"
