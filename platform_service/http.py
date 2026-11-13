@@ -224,8 +224,14 @@ def backend_contract():
             "publish_observation_batch": ["batch"],
             "get_observation_receipt": ["batch_id", "source_id"],
         },
+        "storage_modes": {
+            "legacy": "SQLite without platform settings exposes the original nine tools",
+            "staged": "SQLite mailbox with complete PostgreSQL platform settings exposes all sixteen tools. "
+                      "Mailbox jobs, results, events and usage stay SQLite; observations and Web sessions use PostgreSQL.",
+            "unified": "PostgreSQL mailbox and platform expose all sixteen tools and mailbox usage v2",
+        },
         "whoami_platform_access": {
-            "available_in": "PostgreSQL mode as an additive field on whoami",
+            "available_in": "With the PostgreSQL platform enabled, as an additive field on whoami",
             "allowed_projects": "List of project IDs readable by the authenticated GitHub login",
             "reporting_sources": "Only matching MCP grants, each with source_id, projects, entity_types, authorities",
         },

@@ -1,5 +1,6 @@
 """Run in an isolated temporary schema in a dedicated *_test PostgreSQL database."""
 
+import argparse
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -13,6 +14,7 @@ from threading import Event
 from time import monotonic
 from tempfile import TemporaryDirectory
 from urllib.parse import parse_qs, urlsplit
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -31,7 +33,7 @@ from platform_service.database import PostgresStore, database_engine
 from platform_service.http import build_api
 from platform_service.migrate import copy_mailbox, reconcile_to_sqlite, upgrade
 from platform_service.observations import Observations
-from server import PublicPrefix, create_server
+from server import PublicPrefix, configured_app, create_server
 from smoke_mcp import run_http
 
 PUBLIC = "https://example.test/mailbox"
@@ -359,7 +361,64 @@ def test_platform(engine, store):
     asyncio.run(run_http(app, check_mcp))
 
 
+def test_sqlite_mailbox_with_postgres_platform(engine, directory):
+    root = Path(directory)
+    policy = root / "access.json"
+    policy.write_text(json.dumps({
+        "viewers": {"legacy": ["project"]},
+        "sources": {"trusted": {"projects": ["project"], "entity_types": ["task"],
+                    "authorities": ["native_observation"],
+                    "token_sha256": hashlib.sha256(SOURCE_TOKEN.encode()).hexdigest()}},
+    }))
+    ui = root / "ui"
+    ui.mkdir()
+    (ui / "index.html").write_text("<title>Staged platform</title>")
+    auth = StaticTokenVerifier(tokens={
+        "legacy-token": {"client_id": "legacy", "scopes": [], "login": "legacy", "sub": "42"},
+    })
+    values = {
+        "TASK_MAILBOX_PUBLIC_BASE_URL": PUBLIC, "TASK_MAILBOX_STORAGE_ENGINE": "sqlite",
+        "TASK_MAILBOX_GITHUB_CLIENT_ID": "synthetic-app", "TASK_MAILBOX_GITHUB_CLIENT_SECRET": "synthetic-secret",
+        "TASK_MAILBOX_ALLOWED_GITHUB_USER": "legacy", "TASK_MAILBOX_SIGNING_KEY": "z" * 64,
+        "FASTMCP_HOME": str(root / "oauth"), "TASK_MAILBOX_DATA_DIR": str(root / "legacy"),
+        "TASK_PLATFORM_DATABASE_URL": "test-engine", "TASK_PLATFORM_ACCESS_FILE": str(policy),
+        "TASK_PLATFORM_UI_ROOT": str(ui),
+    }
+    with (patch.dict(os.environ, values, clear=True), patch("server.GitHubProvider", return_value=auth),
+          patch("platform_service.database.configured_engine", return_value=engine)):
+        app = configured_app()
+
+    async def check(origin):
+        async with httpx.AsyncClient(timeout=30) as http:
+            page = await http.get(origin + "/mailbox/ui/")
+            assert page.status_code == 200 and "Staged platform" in page.text
+            posted = await http.post(origin + API + "/observations/batches",
+                                     json=batch("mixed", observation("mixed-event", values={"title": "PG task"})),
+                                     headers={"Authorization": f"Bearer {SOURCE_TOKEN}"})
+            assert posted.status_code == 200 and posted.json()["accepted_event_ids"] == ["mixed-event"]
+        async with Client(origin + "/mailbox/mcp", auth="legacy-token") as client:
+            assert {tool.name for tool in await client.list_tools()} == LEGACY | PLATFORM
+            identity = (await client.call_tool("whoami")).data
+            assert identity["platform_access"]["allowed_projects"] == ["project"]
+            content = payload("SQLite job")
+            await client.call_tool("submit_job", {"job_id": "sqlite-job", "payload": content,
+                                                   "payload_hash": _hash(_json(content))})
+            usage = (await client.call_tool("mailbox_usage")).data
+            assert usage["jobs"] == 1 and usage["page_size"] > 0 and "usage_schema_version" not in usage
+            overview = (await client.call_tool("get_project_overview", {"project_id": "project"})).data
+            assert overview["data"]["tasks"][0]["title"] == "PG task"
+
+    asyncio.run(run_http(app, check))
+    assert Store(root / "legacy" / "mailbox.sqlite3").get_job("sqlite-job")["payload"] == payload("SQLite job")
+    with engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT count(*) FROM jobs").scalar_one() == 0
+        assert connection.exec_driver_sql("SELECT count(*) FROM observation_events").scalar_one() == 1
+
+
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--sqlite-mailbox", action="store_true", help="verify the staged SQLite mailbox and PG platform")
+    args = parser.parse_args()
     engine = database_engine(os.environ["TASK_PLATFORM_TEST_DATABASE_URL"])
     try:
         if not engine.url.database or not engine.url.database.endswith("_test"):
@@ -380,8 +439,11 @@ def main():
         try:
             upgrade(engine)
             with TemporaryDirectory() as directory:
-                store = mailbox_checks(engine, directory)
-                test_platform(engine, store)
+                if args.sqlite_mailbox:
+                    test_sqlite_mailbox_with_postgres_platform(engine, directory)
+                else:
+                    store = mailbox_checks(engine, directory)
+                    test_platform(engine, store)
         finally:
             engine.dispose()
             event.remove(engine, "connect", select_test_schema)
@@ -389,6 +451,9 @@ def main():
                 conn.exec_driver_sql(f"DROP SCHEMA {schema} CASCADE")
     finally:
         engine.dispose()
+    if args.sqlite_mailbox:
+        print("PASS: SQLite legacy mailbox plus PostgreSQL platform on one app")
+        return
     print("PASS: PostgreSQL migration, legacy nine, observation replay and scopes, Web session flow with mocked GitHub")
 
 

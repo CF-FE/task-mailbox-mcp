@@ -219,3 +219,59 @@ class ContractTest(unittest.TestCase):
         reconcile.assert_called_once_with(configure.return_value, target, 131072)
         configure.return_value.dispose.assert_called_once_with()
         self.assertEqual(json.loads(stdout.getvalue()), receipt)
+
+    def test_configured_mailbox_and_platform_modes(self):
+        import os
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from unittest.mock import MagicMock, patch
+
+        from mailbox_store import Store
+        from platform_service.database import PostgresStore
+        from server import configured_app
+
+        with TemporaryDirectory() as directory:
+            base = {
+                "TASK_MAILBOX_PUBLIC_BASE_URL": "https://example.test/mailbox",
+                "TASK_MAILBOX_GITHUB_CLIENT_ID": "synthetic-app",
+                "TASK_MAILBOX_GITHUB_CLIENT_SECRET": "synthetic-secret",
+                "TASK_MAILBOX_ALLOWED_GITHUB_USER": "owner",
+                "TASK_MAILBOX_SIGNING_KEY": "z" * 64,
+                "FASTMCP_HOME": str(Path(directory) / "oauth"),
+                "TASK_MAILBOX_DATA_DIR": str(Path(directory) / "mailbox"),
+            }
+            complete = {"TASK_PLATFORM_DATABASE_URL": "synthetic",
+                        "TASK_PLATFORM_ACCESS_FILE": "synthetic"}
+            cases = [
+                ({}, Store, False),
+                ({"TASK_MAILBOX_STORAGE_ENGINE": "sqlite", **complete}, Store, True),
+                ({"TASK_MAILBOX_STORAGE_ENGINE": "postgresql", **complete}, PostgresStore, True),
+            ]
+            for settings, store_type, enabled in cases:
+                with (
+                    self.subTest(settings=settings),
+                    patch.dict(os.environ, {**base, **settings}, clear=True),
+                    patch("server.GitHubProvider"),
+                    patch("server.create_server") as create,
+                    patch("server.configured_platform") as platform,
+                ):
+                    platform.return_value = MagicMock(), (None, None)
+                    configured_app()
+                    store, _, _, platform_args = create.call_args.args
+                    self.assertIsInstance(store, store_type)
+                    self.assertEqual(platform.called, enabled)
+                    self.assertEqual(platform_args is not None, enabled)
+            for settings in (
+                {"TASK_PLATFORM_UI_ROOT": "/example/ui"},
+                {"TASK_PLATFORM_DATABASE_URL": "synthetic"},
+                {"TASK_PLATFORM_ACCESS_FILE": "synthetic"},
+                {"TASK_PLATFORM_DATABASE_URL": "", "TASK_PLATFORM_ACCESS_FILE": "synthetic"},
+                {"TASK_MAILBOX_STORAGE_ENGINE": "postgresql"},
+            ):
+                with (
+                    self.subTest(settings=settings),
+                    patch.dict(os.environ, {**base, **settings}, clear=True),
+                    patch("server.GitHubProvider"),
+                    self.assertRaisesRegex(ValueError, "complete PostgreSQL and access policy"),
+                ):
+                    configured_app()

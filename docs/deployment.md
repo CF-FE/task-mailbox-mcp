@@ -115,15 +115,24 @@ systemd 的进程重启只恢复信箱服务，不触发任务执行，也不拉
 
 ## 协作平台切换到 PostgreSQL
 
-1. 准备固定版本的应用、[平台依赖锁定文件](../requirements-platform.lock.txt)和 [Web 生产构建](../web/README.md)。核对 VPS 到 Win 专用回环转发与 `verify-full` TLS。业务库和测试库分别使用专用身份。向测试进程私下注入 `TASK_PLATFORM_TEST_DATABASE_URL`，用固定解释器运行 `python tests/smoke_platform_postgres.py`。测试要求独立、空的 `_test` 库，并覆盖结构升级、导入和旧 MCP 合同。测试凭据及目标不进入生产单元。
-2. 从私有配置向迁移进程注入已核对目标的 `TASK_PLATFORM_DATABASE_URL`，使用固定应用目录和独立解释器运行 `python -m platform_service.migrate upgrade`。切换窗口内暂停原信箱写入并排空事务，再运行 `python -m platform_service.migrate import-mailbox --source "<ORIGINAL_SQLITE_FILE>"`。参数指向原位 SQLite。迁移只读打开原库，以事务导入 jobs、events、results，对照各表计数、摘要和游标高水位。公子已排除数据库备份，本轮直接迁移并保留原库，不生成备份或 dump。
-3. 导入与核对通过后，在既有 systemd 单元使用 drop-in 的 `[Service]` 增加 `EnvironmentFile=<PRIVATE_RUNTIME_ENV>`，保留原 OAuth 环境文件。私有 `runtime.env` 设置 `TASK_MAILBOX_STORAGE_ENGINE=postgresql`、`TASK_PLATFORM_DATABASE_URL`、`TASK_PLATFORM_ACCESS_FILE` 和 `TASK_PLATFORM_UI_ROOT`。访问策略文件由既有运行身份可读，按项目限定查看者和观测来源。Web 路径指向包含 `index.html` 的绝对构建目录。凭据、真实路径及策略正文仅留私有配置，切换前确认运行身份能读取所需文件。
-4. 加载单元更新并沿原服务入口启动固定版本。Web 由同一 ASGI 应用挂载到 `/mailbox/ui/`，保留原 HTTPS 前缀、MCP 和 OAuth 回调，不新增代理。回读 schema 版本、九项既有 MCP 工具和已知 job／结果／游标，再核新工具、项目权限、浏览器 OAuth、静态资源及 SSE。Mac 观测接入沿[原协调桥](../mac/README.md#可选的协作平台观测)办理。
+本轮统一 PostgreSQL 的远端 smoke 两次未通过。首轮触发 5 秒连接超时，调整连接后在跨 Store 并发检查的 `pending.result(timeout=15)` 超时。网络短样本测得 RTT 约 311 毫秒并有丢包。当前先验证并部署下述分阶段模式，统一迁移与 P95 验收待完成。
 
-PostgreSQL 下 `mailbox_usage` 返回 v2 诊断。256 MiB 是业务库告警阈值，单份内容和 job 数仍使用原硬上限。切换后 PostgreSQL 是唯一业务库，Mac SQLite 继续保留本地状态与待补传。
+### 先上线平台观测
+
+1. 准备固定应用版本、[平台依赖锁定文件](../requirements-platform.lock.txt)和 [Web 生产构建](../web/README.md)。核对 VPS 到 Win 专用回环转发与 `verify-full` TLS。向测试进程私下注入独立 `_test` 库的 `TASK_PLATFORM_TEST_DATABASE_URL`，用固定解释器运行 `python tests/smoke_platform_postgres.py --sqlite-mailbox`。测试创建并清理本次专用临时 schema，测试库可保留其他 schema。测试凭据及目标不进入生产单元。
+2. 从私有配置向迁移进程注入生产 `TASK_PLATFORM_DATABASE_URL`，在固定应用目录用独立解释器运行 `python -m platform_service.migrate upgrade`。本阶段只升级目标 schema，保留原 SQLite 的 jobs、events、results，不运行 `import-mailbox`。
+3. 在既有 systemd 单元的 drop-in 中增加 `[Service]` 的 `EnvironmentFile=<PRIVATE_RUNTIME_ENV>`，保留原 OAuth 环境文件。私有 `runtime.env` 设置 `TASK_MAILBOX_STORAGE_ENGINE=sqlite`、`TASK_PLATFORM_DATABASE_URL`、`TASK_PLATFORM_ACCESS_FILE` 和 `TASK_PLATFORM_UI_ROOT`。访问策略按项目限定查看者和来源，Web 路径为包含 `index.html` 的绝对构建目录。切换前确认原运行身份可读所需文件。
+4. 沿原入口启动固定版本。同一 ASGI 应用提供 16 项 MCP 工具、平台 API 和 `/mailbox/ui/`，复用现有 HTTPS 前缀与 OAuth 回调。启动必须连通 PostgreSQL 并校验 Alembic revision。启动后原九项信箱工具读写同一原 SQLite，平台观测和 Web 会话使用 PostgreSQL。PG 不可用会影响平台路径，也可能阻止整服务启动或重启。
+5. 回读原九项工具、已知 job／结果／游标和原 SQLite 单写入口，再验证新工具、项目权限、浏览器 OAuth、静态资源及 SSE。Mac 观测接入沿[原协调桥](../mac/README.md#可选的协作平台观测)办理。验收分别记录实际平台路径和延迟。
+
+### 后续统一迁移
+
+在独立测试库以默认模式运行 `python tests/smoke_platform_postgres.py`，通过统一库迁移及旧合同检查后再安排生产切换。切换窗口暂停原信箱写入并排空事务，在已升级目标运行 `python -m platform_service.migrate import-mailbox --source "<ORIGINAL_SQLITE_FILE>"`。原位 SQLite 只读打开，事务导入 jobs、events、results 并对照计数、摘要和游标高水位。公子已排除数据库备份，保留原库，不生成备份或 dump。核对通过后才将 `TASK_MAILBOX_STORAGE_ENGINE` 改为 `postgresql`，沿原入口恢复并回归客户端。
+
+信箱切到 PostgreSQL 后，`mailbox_usage` 返回 v2 诊断。256 MiB 是业务库告警阈值，单份内容和 job 数仍使用原硬上限。届时 PostgreSQL 成为唯一业务库，Mac SQLite 继续保留本地状态与待补传。
 
 ## 回退与保留
 
 新路由或服务失败时，保全 SQLite、OAuth 状态和脱敏证据，停止受影响的新配置步骤。仅撤回本次新增的服务／路由，不删除既有 Gitee 或业务资源，不迁移 UNKNOWN 任务或更换执行入口。认证明确失败时保留原因，由原身份配置负责人处理。
 
-平台切换后，只有确认 PostgreSQL 没有新增提交时才可直接恢复原 SQLite 服务。已有新增提交时，以 PostgreSQL 为权威。需要切回时按 [ADR-001](decisions/001-task-collaboration-platform.md#切换过程)先停写，完成回迁、摘要和游标核对，并验证原 SQLite 页预算。
+信箱切到 PostgreSQL 后，只有确认 PostgreSQL 没有新增信箱提交时才可直接恢复原 SQLite 信箱。已有新增信箱提交时，以 PostgreSQL 为权威。需要切回时按 [ADR-001](decisions/001-task-collaboration-platform.md#切换过程)先停写，完成回迁、摘要和游标核对，并验证原 SQLite 页预算。平台观测数据保留在 PostgreSQL。

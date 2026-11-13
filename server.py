@@ -219,55 +219,69 @@ def configured_app():
     max_payload = int(os.environ.get("TASK_MAILBOX_MAX_PAYLOAD_BYTES", "1048576"))
     max_jobs = int(os.environ.get("TASK_MAILBOX_MAX_JOBS", "10000"))
     backend = os.environ.get("TASK_MAILBOX_STORAGE_ENGINE", "sqlite")
+    if backend not in ("sqlite", "postgresql"):
+        raise ValueError("TASK_MAILBOX_STORAGE_ENGINE must be sqlite or postgresql")
     platform = None
+    ui_root = os.environ.get("TASK_PLATFORM_UI_ROOT")
+    platform_settings = (
+        "TASK_PLATFORM_DATABASE_URL", "TASK_PLATFORM_ACCESS_FILE", "TASK_PLATFORM_UI_ROOT",
+        "TASK_PLATFORM_SOURCE_STALE_SECONDS", "TASK_PLATFORM_DATABASE_WARNING_BYTES",
+    )
+    if backend == "postgresql" or any(key in os.environ for key in platform_settings):
+        engine, platform = configured_platform(public, values, signing_key)
     if backend == "sqlite":
         store = Store(data / "mailbox.sqlite3", max_payload_bytes=max_payload, max_jobs=max_jobs,
                       max_database_bytes=int(os.environ.get("TASK_MAILBOX_MAX_DATABASE_BYTES", "268435456")))
-    elif backend == "postgresql":
-        from sqlalchemy.exc import OperationalError, SQLAlchemyError
-        from platform_service.access import Access, PlatformRoutes
-        from platform_service.database import REVISION, PostgresStore, configured_engine
-        from platform_service.http import build_api
-        from platform_service.observations import Observations
-
-        if not all(os.environ.get(key) for key in ("TASK_PLATFORM_DATABASE_URL", "TASK_PLATFORM_ACCESS_FILE")):
-            raise ValueError("complete PostgreSQL and access policy configuration")
-        engine = None
-        try:
-            engine = configured_engine()
-            with engine.connect() as conn:
-                revision = conn.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
-            if revision != REVISION:
-                raise ValueError("PostgreSQL platform schema revision does not match the application")
-            stale_seconds = int(os.environ.get("TASK_PLATFORM_SOURCE_STALE_SECONDS", "120"))
-            if stale_seconds < 1:
-                raise ValueError("source freshness window must be positive")
-            access = Access.from_file(engine, os.environ["TASK_PLATFORM_ACCESS_FILE"], public,
-                                      values["TASK_MAILBOX_GITHUB_CLIENT_ID"],
-                                      values["TASK_MAILBOX_GITHUB_CLIENT_SECRET"], signing_key)
-            service = Observations(engine, access.policy, stale_seconds)
-            store = PostgresStore(engine, max_payload_bytes=max_payload, max_jobs=max_jobs,
-                                  capacity_warning_bytes=int(os.environ.get(
-                                      "TASK_PLATFORM_DATABASE_WARNING_BYTES", "268435456")))
-        except OperationalError as error:
-            if engine is not None:
-                engine.dispose()
-            if getattr(error.orig, "sqlstate", None) in {"28000", "28P01", "3D000"}:
-                raise ValueError("PostgreSQL credentials or database rejected") from None
-            raise StorageStartupError("PostgreSQL connection temporarily unavailable") from None
-        except (SQLAlchemyError, ValueError):
-            if engine is not None:
-                engine.dispose()
-            raise ValueError("PostgreSQL or platform policy unavailable. Check private configuration and schema.") from None
-        platform = (service, access)
     else:
-        raise ValueError("TASK_MAILBOX_STORAGE_ENGINE must be sqlite or postgresql")
+        from platform_service.database import PostgresStore
+        store = PostgresStore(engine, max_payload_bytes=max_payload, max_jobs=max_jobs,
+                              capacity_warning_bytes=int(os.environ.get(
+                                  "TASK_PLATFORM_DATABASE_WARNING_BYTES", "268435456")))
     server = create_server(store, auth, values["TASK_MAILBOX_ALLOWED_GITHUB_USER"], platform)
     app = server.http_app(path="/mcp", stateless_http=True, json_response=True)
     if platform is not None:
+        from platform_service.access import PlatformRoutes
+        from platform_service.http import build_api
+
         app = PlatformRoutes(app, build_api(*platform),
-                             ui_root=os.environ.get("TASK_PLATFORM_UI_ROOT"), prefix=parsed.path)
+                             ui_root=ui_root, prefix=parsed.path)
     return PublicPrefix(app, parsed.path)
+
+
+def configured_platform(public, values, signing_key):
+    if not all(os.environ.get(key, "").strip()
+               for key in ("TASK_PLATFORM_DATABASE_URL", "TASK_PLATFORM_ACCESS_FILE")):
+        raise ValueError("complete PostgreSQL and access policy configuration")
+
+    from sqlalchemy.exc import OperationalError, SQLAlchemyError
+    from platform_service.access import Access
+    from platform_service.database import REVISION, configured_engine
+    from platform_service.observations import Observations
+
+    engine = None
+    try:
+        engine = configured_engine()
+        with engine.connect() as conn:
+            revision = conn.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
+        if revision != REVISION:
+            raise ValueError("PostgreSQL platform schema revision does not match the application")
+        stale_seconds = int(os.environ.get("TASK_PLATFORM_SOURCE_STALE_SECONDS", "120"))
+        if stale_seconds < 1:
+            raise ValueError("source freshness window must be positive")
+        access = Access.from_file(engine, os.environ["TASK_PLATFORM_ACCESS_FILE"], public,
+                                  values["TASK_MAILBOX_GITHUB_CLIENT_ID"],
+                                  values["TASK_MAILBOX_GITHUB_CLIENT_SECRET"], signing_key)
+        return engine, (Observations(engine, access.policy, stale_seconds), access)
+    except OperationalError as error:
+        if engine is not None:
+            engine.dispose()
+        if getattr(error.orig, "sqlstate", None) in {"28000", "28P01", "3D000"}:
+            raise ValueError("PostgreSQL credentials or database rejected") from None
+        raise StorageStartupError("PostgreSQL connection temporarily unavailable") from None
+    except (SQLAlchemyError, ValueError):
+        if engine is not None:
+            engine.dispose()
+        raise ValueError("PostgreSQL or platform policy unavailable. Check private configuration and schema.") from None
 
 
 

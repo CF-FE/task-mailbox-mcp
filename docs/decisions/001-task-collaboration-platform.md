@@ -79,6 +79,8 @@ VPS 首期使用单个 ASGI 应用进程承载 HTTP 和 MCP，复用原认证的
 
 现场核对后以既有 HTTPS 入口为部署依据。Web 构建由同一 ASGI 应用通过 `TASK_PLATFORM_UI_ROOT` 静态挂载到 `/mailbox/ui/`，沿原前缀接入 API、SSE 与 OAuth。部署沿现有 systemd 单元完成，不新增代理或前端进程。执行顺序及实际结果见[部署说明](../deployment.md#协作平台切换到-postgresql)和[验证记录](../verification/postgres-platform.md)。
 
+本轮实施先交付平台观测。统一 PostgreSQL 的远端 smoke 先遇 5 秒连接超时，调整后又在跨 Store 并发检查的 15 秒等待处超时。网络短样本 RTT 约 311 毫秒并有丢包。当前验证和部署使用 `TASK_MAILBOX_STORAGE_ENGINE=sqlite` 加完整平台 PostgreSQL 配置，同一 ASGI 应用提供 16 项工具。原信箱保持 SQLite 单写，平台观测和 Web 会话使用 PostgreSQL。本阶段仅升级 schema，启动仍须校验 PostgreSQL revision。运行中的原九项信箱工具访问 SQLite，PG 故障仍影响平台及服务重启。统一库仍为最终目标，迁移和 P95 验收待完成。
+
 ## 统一数据模型与事实来源
 
 ### 核心对象
