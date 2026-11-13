@@ -4,6 +4,10 @@
 
 本项目维护与 Issue 目标固定为 `CF-FE/task-mailbox-mcp`；整合目录、机器或聊天位置不是仓库归属证据。其他项目任务仍绑定各自原仓库与正式 Project，不集中到本服务仓。
 
+## 2026-11-14 已采纳的平台扩展
+
+[ADR-001](docs/decisions/001-task-collaboration-platform.md)已由公子采纳并授权实施：[首期合同](docs/implementation/platform-v1-contract.md)约束 PostgreSQL、监控 Web、观测接入、Agent 查询／上报与配套 Skill。下文的 SQLite 存储／页硬配额／无界面是既有实现合同；平台切换时按 ADR 明确升级该范围，其余原九工具语义、原 ID/hash/版本/游标、取消及验收边界保持。PostgreSQL 的 usage v2 不伪装 SQLite 页统计，256 MiB 变为告警阈值；公子已排除数据库备份工作。当前实际部署状态仍查验证记录，不因采纳而假定已切换。
+
 ## 用户流程与边界
 
 1. Dot 或本地客户端持久提交带固定 `job_id` 的任务数据。

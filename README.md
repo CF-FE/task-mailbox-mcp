@@ -13,6 +13,8 @@ VPS 服务只收发和保存数据。本仓新增 [Mac 协调桥](mac/README.md)
 
 后续项目协作的统一查看、派发前核读、原仓库资产归属、Iteration 和结果关联，见[Projects 关联契约](docs/projects.md)。正式状态沿原 Projects／任务正文维护；信箱保留固定引用。
 
+重构方案见 [ADR-001：协作监控与数据共享平台](docs/decisions/001-task-collaboration-platform.md)（Accepted，2026-11-14）：统一业务数据库部署到 Win，新增 Web、角色／任务／工作流观测及配套 Skill；人工解阻接口后续启用。本轮不安排数据库备份，实际安装和部署以验证记录为准。
+
 ## 组件名称
 
 - **Task Mailbox**：VPS 持久信箱服务及桌面／云端使用的 MCP 插件。
