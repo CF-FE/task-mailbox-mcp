@@ -18,19 +18,32 @@ from mailbox_store import Store
 from oauth_storage import build_oauth_storage
 
 
+PLATFORM_TOOLS = {
+    "get_project_overview", "list_role_activity", "get_task_trace", "get_workflow_run",
+    "list_blockers", "publish_observation_batch", "get_observation_receipt",
+}
+
+
+class StorageStartupError(RuntimeError):
+    pass
+
+
 class AccountGuard(Middleware):
-    def __init__(self, allowed_login):
+    def __init__(self, allowed_login, platform_enabled=False):
         self.allowed_login = allowed_login.casefold()
+        self.platform_enabled = platform_enabled
 
     async def on_call_tool(self, context, call_next):
         token = get_access_token()
         login = (token.claims or {}).get("login") if token else None
+        if self.platform_enabled and context.message.name in PLATFORM_TOOLS:
+            return await call_next(context)
         if not isinstance(login, str) or login.casefold() != self.allowed_login:
             raise ToolError("AUTHORIZATION_DENIED: this account cannot access the mailbox")
         return await call_next(context)
 
 
-def create_server(store, auth, allowed_login):
+def create_server(store, auth, allowed_login, platform=None):
     """Auth is explicit; production configuration never permits auth=None."""
     if auth is None or not isinstance(allowed_login, str) or not allowed_login.strip():
         raise ValueError("authentication and an allowed GitHub account are required")
@@ -44,7 +57,11 @@ def create_server(store, auth, allowed_login):
         auth=auth,
         mask_error_details=True,
     )
-    server.add_middleware(AccountGuard(allowed_login))
+    server.add_middleware(AccountGuard(allowed_login, platform is not None))
+    storage_errors = (sqlite3.Error,)
+    if platform is not None:
+        from sqlalchemy.exc import SQLAlchemyError
+        storage_errors += (SQLAlchemyError,)
 
     def invoke(operation, *args):
         try:
@@ -53,8 +70,10 @@ def create_server(store, auth, allowed_login):
             raise ToolError("NOT_FOUND: the requested record does not exist") from error
         except ValueError as error:
             raise ToolError(f"INVALID_REQUEST: {error}") from error
-        except sqlite3.Error as error:
-            code = "STORAGE_FULL" if getattr(error, "sqlite_errorcode", None) == sqlite3.SQLITE_FULL else "STORAGE_UNAVAILABLE"
+        except storage_errors as error:
+            is_full = (getattr(error, "sqlite_errorcode", None) == sqlite3.SQLITE_FULL or
+                       getattr(getattr(error, "orig", None), "sqlstate", None) == "53100")
+            code = "STORAGE_FULL" if is_full else "STORAGE_UNAVAILABLE"
             raise ToolError(f"{code}: no success acknowledged; query original job/event IDs") from error
 
     read = {"readOnlyHint": True, "destructiveHint": False,
@@ -120,6 +139,9 @@ def create_server(store, auth, allowed_login):
         """Record a caller's read ACK for an exact version/hash, not acceptance."""
         return invoke(store.ack_result_read, job_id, event_id, version, result_hash)
 
+    if platform is not None:
+        from platform_service.mcp import add_tools
+        add_tools(server, *platform, read, write)
     return server
 
 
@@ -185,13 +207,59 @@ def configured_app():
         client_storage=oauth_storage,
         require_authorization_consent=True,
     )
-    store = Store(data / "mailbox.sqlite3",
-                  max_payload_bytes=int(os.environ.get("TASK_MAILBOX_MAX_PAYLOAD_BYTES", "1048576")),
-                  max_database_bytes=int(os.environ.get("TASK_MAILBOX_MAX_DATABASE_BYTES", "268435456")),
-                  max_jobs=int(os.environ.get("TASK_MAILBOX_MAX_JOBS", "10000")))
-    server = create_server(store, auth, values["TASK_MAILBOX_ALLOWED_GITHUB_USER"])
-    return PublicPrefix(server.http_app(path="/mcp", stateless_http=True,
-                                         json_response=True), parsed.path)
+    max_payload = int(os.environ.get("TASK_MAILBOX_MAX_PAYLOAD_BYTES", "1048576"))
+    max_jobs = int(os.environ.get("TASK_MAILBOX_MAX_JOBS", "10000"))
+    backend = os.environ.get("TASK_MAILBOX_STORAGE_ENGINE", "sqlite")
+    platform = None
+    if backend == "sqlite":
+        store = Store(data / "mailbox.sqlite3", max_payload_bytes=max_payload, max_jobs=max_jobs,
+                      max_database_bytes=int(os.environ.get("TASK_MAILBOX_MAX_DATABASE_BYTES", "268435456")))
+    elif backend == "postgresql":
+        from sqlalchemy.exc import OperationalError, SQLAlchemyError
+        from platform_service.access import Access, PlatformRoutes
+        from platform_service.database import REVISION, PostgresStore, configured_engine
+        from platform_service.http import build_api
+        from platform_service.observations import Observations
+
+        if not all(os.environ.get(key) for key in ("TASK_PLATFORM_DATABASE_URL", "TASK_PLATFORM_ACCESS_FILE")):
+            raise ValueError("complete PostgreSQL and access policy configuration")
+        engine = None
+        try:
+            engine = configured_engine()
+            with engine.connect() as conn:
+                revision = conn.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
+            if revision != REVISION:
+                raise ValueError("PostgreSQL platform schema revision does not match the application")
+            stale_seconds = int(os.environ.get("TASK_PLATFORM_SOURCE_STALE_SECONDS", "120"))
+            if stale_seconds < 1:
+                raise ValueError("source freshness window must be positive")
+            access = Access.from_file(engine, os.environ["TASK_PLATFORM_ACCESS_FILE"], public,
+                                      values["TASK_MAILBOX_GITHUB_CLIENT_ID"],
+                                      values["TASK_MAILBOX_GITHUB_CLIENT_SECRET"], signing_key)
+            service = Observations(engine, access.policy, stale_seconds)
+            store = PostgresStore(engine, max_payload_bytes=max_payload, max_jobs=max_jobs,
+                                  capacity_warning_bytes=int(os.environ.get(
+                                      "TASK_PLATFORM_DATABASE_WARNING_BYTES", "268435456")))
+        except OperationalError as error:
+            if engine is not None:
+                engine.dispose()
+            if getattr(error.orig, "sqlstate", None) in {"28000", "28P01", "3D000"}:
+                raise ValueError("PostgreSQL credentials or database rejected") from None
+            raise StorageStartupError("PostgreSQL connection temporarily unavailable") from None
+        except (SQLAlchemyError, ValueError):
+            if engine is not None:
+                engine.dispose()
+            raise ValueError("PostgreSQL or platform policy unavailable. Check private configuration and schema.") from None
+        platform = (service, access)
+    else:
+        raise ValueError("TASK_MAILBOX_STORAGE_ENGINE must be sqlite or postgresql")
+    server = create_server(store, auth, values["TASK_MAILBOX_ALLOWED_GITHUB_USER"], platform)
+    app = server.http_app(path="/mcp", stateless_http=True, json_response=True)
+    if platform is not None:
+        app = PlatformRoutes(app, build_api(*platform),
+                             ui_root=os.environ.get("TASK_PLATFORM_UI_ROOT"), prefix=parsed.path)
+    return PublicPrefix(app, parsed.path)
+
 
 
 if __name__ == "__main__":
@@ -199,6 +267,9 @@ if __name__ == "__main__":
     os.umask(0o077)
     try:
         app = configured_app()
+    except StorageStartupError as error:
+        print(str(error), file=sys.stderr)
+        raise SystemExit(75) from None
     except (ValueError, OSError, sqlite3.Error) as error:
         print(f"Configuration failed: {error}", file=sys.stderr)
         raise SystemExit(78) from error
