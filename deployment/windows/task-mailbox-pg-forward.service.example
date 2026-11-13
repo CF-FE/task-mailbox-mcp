@@ -1,0 +1,17 @@
+[Unit]
+Description=Task Mailbox PostgreSQL private TCP forward
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/ssh -F /path/to/private/ssh/config -NT -oBatchMode=yes -oRequestTTY=no -oForwardAgent=no -oForwardX11=no -oControlMaster=no -oControlPath=none -oStrictHostKeyChecking=yes -oExitOnForwardFailure=yes -oConnectTimeout=8 -oServerAliveInterval=10 -oServerAliveCountMax=3 -L 127.0.0.1:25432:127.0.0.1:25432 configured-win-alias
+Restart=always
+RestartSec=4
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
