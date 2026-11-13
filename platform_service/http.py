@@ -232,7 +232,8 @@ def backend_contract():
         "role_activity_merge": (
             "For native role activity with the same nonempty session_ref and equal binding_id (including both null), "
             "prefer the latest explicit last_observed_at for observed_state, latest_action, and "
-            "last_observed_at. Conflicting different sessions or bindings remain unknown."
+            "last_observed_at. An explicit task_id (including null) follows the same activity time; "
+            "an omitted task_id does not overwrite. Conflicting sessions or bindings remain unknown."
         ),
         "workflow_measurement": (
             "measured_duration_seconds and measured_duration_basis are optional together, "

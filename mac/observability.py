@@ -22,7 +22,7 @@ else:
 SETTINGS_NAME = 'observations.json'
 BUFFER_NAME = 'observations.sqlite3'
 GAP_NAME = 'observations.gap'
-ROUND_TIMEOUT = 4
+ROUND_TIMEOUT = 20
 INTERVAL = 5
 SETTINGS_KEYS = {'schema_version', 'api_base', 'source_id', 'project_id', 'token_file', 'jobs'}
 
@@ -253,16 +253,26 @@ async def request(client, settings, method, suffix, body=None):
     url = settings['api_base'] + '/observations/batches' + suffix
     content = None if body is None else canonical(body).encode()
     async with client.stream(method, url, content=content) as response:
-        if method == 'GET' and response.status_code == 404:
-            return None
-        if not response.is_success:
+        missing_candidate = method == 'GET' and response.status_code == 404
+        if not response.is_success and not missing_candidate:
             raise SourceHTTPError(response.status_code)
         raw = bytearray()
         async for chunk in response.aiter_bytes():
             if len(raw) + len(chunk) > MAX_BATCH_BYTES:
                 raise ValueError('observation receipt exceeds the read budget')
             raw.extend(chunk)
-    return json.loads(raw)
+    if not missing_candidate:
+        return json.loads(raw)
+    try:
+        envelope = json.loads(raw)
+    except (ValueError, RecursionError):
+        raise SourceHTTPError(404) from None
+    error = envelope.get('error') if isinstance(envelope, dict) else None
+    if (isinstance(error, dict) and error.get('code') == 'NOT_FOUND'
+            and isinstance(error.get('message'), str) and error.get('retryable') is False
+            and isinstance(envelope.get('request_id'), str) and envelope['request_id']):
+        return None
+    raise SourceHTTPError(404)
 
 
 async def flush_one(store, settings, transport):

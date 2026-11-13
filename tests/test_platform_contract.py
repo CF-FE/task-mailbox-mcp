@@ -161,7 +161,17 @@ class ContractTest(unittest.TestCase):
             self.assertEqual(fields["observed_state"], "ACTIVE")
             self.assertEqual(fields["latest_action"], "PreToolUse: Read")
             self.assertEqual(fields["last_observed_at"], "2026-11-14T08:00:01+08:00")
-            self.assertEqual(conflicts, {"task_id"})
+            self.assertEqual(fields["task_id"], "mapped-task")
+            self.assertFalse(conflicts)
+
+        unassigned = role("mac-fanren-session-hooks", "2026-11-14T00:00:01Z", "ACTIVE",
+                          "PreToolUse: Read", task_id=None)
+        fields, _, _, conflicts = Observations._merge([old, unassigned])[("fanren", "role", "coordinator")]
+        self.assertIsNone(fields["task_id"])
+        self.assertFalse(conflicts)
+        del unassigned.body["payload"]["task_id"]
+        fields, _, _, _ = Observations._merge([old, unassigned])[("fanren", "role", "coordinator")]
+        self.assertEqual(fields["task_id"], "archived-task")
 
         unbound_old = role("fanren-r17-case", "2026-11-13T23:00:00Z", "UNKNOWN",
                            "Archived action", binding_id=None)
@@ -170,6 +180,12 @@ class ContractTest(unittest.TestCase):
         fields, _, _, conflicts = Observations._merge([unbound_old, unbound_new])[("fanren", "role", "coordinator")]
         self.assertEqual(fields["observed_state"], "ACTIVE")
         self.assertFalse(conflicts)
+
+        foreign = role("mac-fanren-session-hooks", "2026-11-14T00:00:01Z", "ACTIVE",
+                       "PreToolUse: Read", session_ref="other-session", task_id=None)
+        fields, _, _, conflicts = Observations._merge([old, foreign])[("fanren", "role", "coordinator")]
+        self.assertNotIn("task_id", fields)
+        self.assertIn("task_id", conflicts)
 
         for field, value in (("session_ref", "other-session"), ("binding_id", "other-binding"),
                              ("binding_id", None), ("last_observed_at", "2026-11-13T23:00:00Z")):

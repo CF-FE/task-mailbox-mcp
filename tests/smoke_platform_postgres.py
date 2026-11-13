@@ -1,4 +1,4 @@
-"""Run only against a newly provisioned, dedicated *_test PostgreSQL database."""
+"""Run in an isolated temporary schema in a dedicated *_test PostgreSQL database."""
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 import sqlite3
 import sys
+from threading import Event
+from time import monotonic
 from tempfile import TemporaryDirectory
 from urllib.parse import parse_qs, urlsplit
 
@@ -20,7 +22,8 @@ from fastmcp.server.auth.providers.jwt import StaticTokenVerifier
 from fastmcp.server.auth.providers.github import GitHubProvider
 from key_value.aio.stores.memory import MemoryStore
 import httpx2 as httpx
-from sqlalchemy import inspect
+from sqlalchemy import event
+from uuid import uuid4
 
 from mailbox_store import Store, _hash, _json
 from platform_service.access import Access, AuthorizedSource, PlatformRoutes, Policy
@@ -68,9 +71,19 @@ def mailbox_checks(engine, directory):
     assert store.get_result(job["job_id"]) == sqlite.get_result(job["job_id"])
     assert store.list_events(recipient="b\0c") == sqlite.list_events(recipient="b\0c")
     assert store.publish_result("historical", "result1", "REPORTED_COMPLETED", {"result": "回执"}) == result
-    with ThreadPoolExecutor(8) as pool:
-        results = list(pool.map(lambda index: store.publish_result(
-            "historical", f"result-{index+2}", "UNKNOWN", {"index": index}), range(24)))
+    physical_connections = []
+
+    def on_connect(_connection, _record):
+        physical_connections.append(True)
+
+    event.listen(engine, "connect", on_connect)
+    try:
+        with ThreadPoolExecutor(8) as pool:
+            results = list(pool.map(lambda index: store.publish_result(
+                "historical", f"result-{index+2}", "UNKNOWN", {"index": index}), range(24)))
+    finally:
+        event.remove(engine, "connect", on_connect)
+    assert not physical_connections, "serialized mailbox writes should reuse the warm connection"
     events = store.list_events(cursor=90)["events"]
     assert [e["cursor"] for e in events] == list(range(91, 115))
     assert [e["data"]["version"] for e in events] == list(range(2, 26))
@@ -89,7 +102,49 @@ def mailbox_checks(engine, directory):
     usage = store.stats()
     assert usage["usage_schema_version"] == 2 and usage["page_count"] is None
     assert usage["jobs"] == 1 and usage["results"] == 25 and usage["database_size_bytes"] > 0
+    cross_store_cursor_order(engine, store)
     return store
+
+
+def cross_store_cursor_order(engine, first):
+    second = PostgresStore(engine)
+    waiter_started = Event()
+    waiter_pids = []
+
+    def record_waiter(conn, _cursor, statement, _params, _context, _many):
+        if statement.startswith("SELECT value FROM platform_cursors") and "FOR UPDATE" in statement:
+            waiter_pids.append(conn.connection.driver_connection.info.backend_pid)
+            waiter_started.set()
+
+    # Warm both sessions sequentially before the first takes the cursor lock.
+    with engine.connect(), engine.connect():
+        pass
+    with ThreadPoolExecutor(1) as pool:
+        with first._transaction() as locked:
+            conn = locked.connection
+            first_event = first._append_event(locked, "cross-store-first", "historical",
+                                              "CANCEL_REQUESTED",
+                                              _hash(_json({"job_id": "historical",
+                                                           "event_type": "CANCEL_REQUESTED"})), {})
+            event.listen(engine, "before_cursor_execute", record_waiter)
+            try:
+                pending = pool.submit(second.request_cancel, "historical", "cross-store-second")
+                assert waiter_started.wait(5), "second Store did not request the cursor row lock"
+                deadline = monotonic() + 3
+                while monotonic() < deadline:
+                    blocked_by_first = conn.exec_driver_sql(
+                        "SELECT pg_backend_pid() = ANY(pg_blocking_pids(%s))", (waiter_pids[0],)
+                    ).scalar_one()
+                    if blocked_by_first:
+                        break
+                else:
+                    raise AssertionError("PostgreSQL did not block the second Store on the first transaction")
+                assert not pending.done()
+            finally:
+                event.remove(engine, "before_cursor_execute", record_waiter)
+        second_event = pending.result(timeout=15)
+    assert second_event["cursor"] == first_event["cursor"] + 1
+    assert second.list_events(cursor=first_event["cursor"] - 1)["events"] == [first_event, second_event]
 
 
 def observation(event_id, entity_type="task", entity_id="task", values=None,
@@ -308,13 +363,30 @@ def main():
     engine = database_engine(os.environ["TASK_PLATFORM_TEST_DATABASE_URL"])
     try:
         if not engine.url.database or not engine.url.database.endswith("_test"):
-            raise SystemExit("Use a dedicated, empty PostgreSQL database with a _test suffix")
-        if inspect(engine).get_table_names():
-            raise SystemExit("The dedicated PostgreSQL database must be empty")
-        upgrade(engine)
-        with TemporaryDirectory() as directory:
-            store = mailbox_checks(engine, directory)
-            test_platform(engine, store)
+            raise SystemExit("Use a dedicated PostgreSQL database with a _test suffix")
+        schema = f"smoke_{uuid4().hex}"
+        with engine.begin() as conn:
+            conn.exec_driver_sql(f"CREATE SCHEMA {schema}")
+        engine.dispose()
+
+        @event.listens_for(engine, "connect")
+        def select_test_schema(dbapi_connection, _record):
+            dbapi_connection.autocommit = True
+            try:
+                dbapi_connection.execute(f"SET search_path TO {schema}")
+            finally:
+                dbapi_connection.autocommit = False
+
+        try:
+            upgrade(engine)
+            with TemporaryDirectory() as directory:
+                store = mailbox_checks(engine, directory)
+                test_platform(engine, store)
+        finally:
+            engine.dispose()
+            event.remove(engine, "connect", select_test_schema)
+            with engine.begin() as conn:
+                conn.exec_driver_sql(f"DROP SCHEMA {schema} CASCADE")
     finally:
         engine.dispose()
     print("PASS: PostgreSQL migration, legacy nine, observation replay and scopes, Web session flow with mocked GitHub")

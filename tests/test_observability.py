@@ -1,5 +1,5 @@
 import asyncio
-from contextlib import closing, redirect_stderr
+from contextlib import asynccontextmanager, closing, redirect_stderr
 import io
 import json
 from pathlib import Path
@@ -67,6 +67,53 @@ class ObservationTests(unittest.TestCase):
         self.assertTrue(asyncio.run(observability.flush_one(reopened, self.settings, lookup)))
         self.assertEqual(calls, ['GET', 'POST', 'GET'])
         self.assertEqual(reopened.next_batch(self.source)['events'], [{'event_id': 'second'}])
+
+    def test_only_backend_receipt_not_found_allows_post_of_original_batch(self):
+        self.store.enqueue(self.source, {'event_id': 'original'})
+        batch = self.store.next_batch(self.source)
+        valid = {'error': {'code': 'NOT_FOUND', 'message': 'Observation receipt not found',
+                           'retryable': False}, 'request_id': 'request-test'}
+        calls = []
+
+        class Response:
+            def __init__(self, status_code, content):
+                self.status_code = status_code
+                self.is_success = status_code == 200
+                self.content = content
+
+            async def aiter_bytes(self):
+                yield self.content
+
+        class Client:
+            @asynccontextmanager
+            async def stream(self, method, _url, content=None):
+                calls.append(method)
+                if method == 'GET':
+                    yield Response(404, lookup_body)
+                else:
+                    self_batch = json.loads(content)
+                    assert self_batch == batch
+                    yield Response(200, canonical(receipt(batch)).encode())
+
+        client = Client()
+
+        async def send(method, suffix, body=None):
+            return await observability.request(client, self.settings, method, suffix, body)
+
+        for lookup_body in (b'<html>missing</html>', b'{', b'{"error":{"code":"NOT_FOUND"}}',
+                            canonical({**valid, 'error': {**valid['error'], 'code': 'HTTP_ERROR'}}).encode(),
+                            b'x' * (MAX_BATCH_BYTES + 1)):
+            with self.subTest(prefix=lookup_body[:40]):
+                calls.clear()
+                with self.assertRaises((observability.SourceHTTPError, ValueError)):
+                    asyncio.run(observability.flush_one(self.store, self.settings, send))
+                self.assertEqual(calls, ['GET'])
+                self.assertEqual(self.store.next_batch(self.source), batch)
+        calls.clear()
+        lookup_body = canonical(valid).encode()
+        self.assertTrue(asyncio.run(observability.flush_one(self.store, self.settings, send)))
+        self.assertEqual(calls, ['GET', 'POST'])
+        self.assertIsNone(self.store.next_batch(self.source))
 
     def test_receipt_mismatch_preserves_original_batch(self):
         for name in ('a', 'b'):

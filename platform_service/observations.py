@@ -22,7 +22,7 @@ TASK_AUTHORITY = {
     "followup_ref": "native_observation",
 }
 SELF_REPORT_FIELDS = {"title", "reported_status"}
-ROLE_ACTIVITY_FIELDS = {"observed_state", "latest_action", "last_observed_at"}
+ROLE_ACTIVITY_FIELDS = {"observed_state", "latest_action", "last_observed_at", "task_id"}
 
 
 def integer_cursor(value):
@@ -144,20 +144,23 @@ class Observations:
             watermark = conn.exec_driver_sql(
                 "SELECT value FROM platform_cursors WHERE stream='observations' FOR UPDATE"
             ).scalar_one()
-            row = conn.exec_driver_sql(
-                "SELECT request_hash, receipt FROM observation_batches WHERE source_id=%s AND batch_id=%s",
-                (source.id, batch.batch_id),
-            ).one_or_none()
-            if row:
-                if row.request_hash != request_hash:
+            # Keep this statement after the row lock so a blocked retry sees
+            # the preceding transaction's committed batch and event hashes.
+            prior_batch, prior_receipt, prior = conn.exec_driver_sql("""
+                SELECT b.request_hash, b.receipt, COALESCE((
+                    SELECT jsonb_object_agg(event_id, request_hash)
+                    FROM observation_events
+                    WHERE source_id=%s AND event_id=ANY(%s) AND b.request_hash IS NULL
+                ), '{}'::jsonb)
+                FROM (VALUES (1)) AS seed(n)
+                LEFT JOIN observation_batches b ON b.source_id=%s AND b.batch_id=%s
+            """, (source.id, [event.event_id for event in batch.events],
+                  source.id, batch.batch_id)).one()
+            if prior_batch is not None:
+                if prior_batch != request_hash:
                     raise APIError(409, "OBSERVATION_CONFLICT", "Batch ID already has different content")
-                return Receipt.model_validate(row.receipt)
+                return Receipt.model_validate(prior_receipt)
             received = datetime.now(timezone.utc)
-            prior = dict(conn.exec_driver_sql(
-                "SELECT event_id, request_hash FROM observation_events "
-                "WHERE source_id=%s AND event_id=ANY(%s)",
-                (source.id, [event.event_id for event in batch.events]),
-            ).tuples().all())
             inserts, snapshots = [], []
             for event, body, digest in zip(batch.events, bodies, digests, strict=True):
                 if event.event_id in prior:
@@ -197,15 +200,14 @@ class Observations:
                 """, snapshots)
             receipt = Receipt(batch_id=batch.batch_id, source_id=source.id, accepted_event_ids=accepted,
                               duplicate_event_ids=duplicate, watermark=str(watermark))
-            conn.exec_driver_sql(
-                "INSERT INTO observation_batches (source_id,batch_id,request_hash,receipt,projects) "
-                "VALUES (%s,%s,%s,%s,%s)",
-                (source.id, batch.batch_id, request_hash, Jsonb(receipt.model_dump()),
-                 sorted({event.project_id for event in batch.events})),
-            )
-            if accepted:
-                conn.exec_driver_sql("UPDATE platform_cursors SET value=%s WHERE stream='observations'",
-                                     (watermark,))
+            conn.exec_driver_sql("""
+                WITH advance AS (
+                    UPDATE platform_cursors SET value=%s WHERE stream='observations' AND %s
+                )
+                INSERT INTO observation_batches (source_id,batch_id,request_hash,receipt,projects)
+                VALUES (%s,%s,%s,%s,%s)
+            """, (watermark, bool(accepted), source.id, batch.batch_id, request_hash,
+                  Jsonb(receipt.model_dump()), sorted({event.project_id for event in batch.events})))
         return receipt
 
     def receipt(self, source, batch_id):
@@ -295,7 +297,10 @@ class Observations:
                 if (row.entity_type == "role" and key in ROLE_ACTIVITY_FIELDS and
                         (row.project_id, row.entity_id) in comparable_roles):
                     activity_time = datetime.fromisoformat(body["payload"]["last_observed_at"])
-                rank = (score, activity_time, value is not None)
+                # Explicit null in a newer activity means the session is unassigned.
+                # Without comparable identity, a conflicting association stays unknown.
+                role_task = row.entity_type == "role" and key == "task_id"
+                rank = (score, activity_time, role_task or value is not None)
                 previous = strengths.get(key, (-1, activity_time, False))
                 if rank > previous:
                     strengths[key], fields[key] = rank, value

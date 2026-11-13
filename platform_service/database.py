@@ -3,6 +3,7 @@
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import os
+from threading import Lock
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
@@ -27,7 +28,7 @@ def database_engine(dsn, *, require_tls=False):
     return create_engine(url,
                          pool_size=4, max_overflow=2, pool_timeout=4, pool_pre_ping=True,
                          hide_parameters=True, connect_args={
-                             "connect_timeout": 5,
+                             "connect_timeout": 15,
                              "options": "-c statement_timeout=5000 -c lock_timeout=4500",
                          })
 
@@ -77,15 +78,16 @@ class PostgresStore(Store):
         if max_payload_bytes < 1 or capacity_warning_bytes < 1 or not 1 <= max_jobs <= MAX_SQLITE_INTEGER:
             raise ValueError("invalid mailbox capacity configuration")
         self.engine = engine
+        self.transaction_lock = Lock()
         self.max_payload_bytes = max_payload_bytes
         self.capacity_warning_bytes = capacity_warning_bytes
         self.max_jobs = max_jobs
 
     @contextmanager
     def _transaction(self):
-        # Inherited Store methods use the same entry point for reads and writes.
-        # Serialize them as before so job/result reads also see a coherent state.
-        with self.engine.begin() as connection:
+        # Queue callers before checkout. These operations all take the same PG
+        # lock, so parallel checkouts only hold idle connections while waiting.
+        with self.transaction_lock, self.engine.begin() as connection:
             connection.exec_driver_sql(
                 "SELECT value FROM platform_cursors WHERE stream = 'mailbox' FOR UPDATE"
             ).scalar_one()
@@ -93,14 +95,14 @@ class PostgresStore(Store):
 
     def _append_event(self, connection, event_id, job_id, event_type, request_hash, data):
         created_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
-        cursor = connection.execute(
-            "UPDATE platform_cursors SET value = value + 1 WHERE stream = 'mailbox' RETURNING value"
-        ).fetchone()[0]
-        row = connection.execute(
-            "INSERT INTO events(cursor, event_id, job_id, event_type, request_hash, data_json, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *",
-            (cursor, event_id, job_id, event_type, request_hash, _json(data), created_at),
-        ).fetchone()
+        row = connection.execute("""
+            WITH next_cursor AS (
+                UPDATE platform_cursors SET value = value + 1
+                WHERE stream = 'mailbox' RETURNING value
+            )
+            INSERT INTO events(cursor, event_id, job_id, event_type, request_hash, data_json, created_at)
+            SELECT value, ?, ?, ?, ?, ?, ? FROM next_cursor RETURNING *
+        """, (event_id, job_id, event_type, request_hash, _json(data), created_at)).fetchone()
         return self._event(row)
 
     def stats(self):
