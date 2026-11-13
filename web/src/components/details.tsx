@@ -21,7 +21,7 @@ export function TaskDetail({ project, id, roles }: { project: string; id: string
         <dl className="grid grid-cols-1 divide-border border-b border-border sm:grid-cols-2 lg:grid-cols-4 lg:divide-x">
           <div className="metric"><dt className="muted">执行方报告</dt><dd><Status value={task.reported_status} /></dd></div>
           <div className="metric"><dt className="muted">负责人验收</dt><dd><Status value={task.acceptance_status} /></dd></div>
-          <div className="metric"><dt className="muted">协调待办</dt><dd><Status value={task.followup_status} /></dd>
+          <div className="metric"><dt className="muted">协调待办</dt><dd><Status value={task.followup_status?.toUpperCase() === "CLOSED" ? "已关闭" : task.followup_status} /></dd>
             {task.followup_revision != null && <dd className="muted">修订 {task.followup_revision}</dd>}
             {task.followup_ref && <dd className="muted break-content">{task.followup_ref}</dd>}
           </div>
@@ -36,6 +36,7 @@ export function TaskDetail({ project, id, roles }: { project: string; id: string
             <div><dt className="muted">当前承接</dt><dd>{roleName(task.current_handler_role_id, roles)}</dd></div>
             <div><dt className="muted">当前步骤</dt><dd>{task.current_step_id || "未知"}</dd></div>
             <div><dt className="muted">等待对象</dt><dd>{task.waiting_on || "未知"}</dd></div>
+            <div><dt className="muted">接手时间</dt><dd>{time(task.accepted_at, "未见接单证据")}</dd></div>
             <div><dt className="muted">承诺交期</dt><dd>{time(task.committed_deadline_at, "未承诺")}</dd></div>
             <div><dt className="muted">内部复查点</dt><dd>{time(task.internal_check_at, "未记录")}</dd></div>
             <div className="col-span-2"><dt className="muted">下一动作</dt><dd>{task.next_action || "未知"}</dd></div>

@@ -20,7 +20,6 @@ function StepCard({ data, selected }: NodeProps<StepNode>) {
 }
 
 const nodeTypes = { step: StepCard }
-const measuredSecondsFormat = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 9, useGrouping: false })
 
 function layout(run: Run) {
   const incoming = new Map(run.nodes.map(({ id }) => [id, 0]))
@@ -121,7 +120,7 @@ function Graph({ run }: { run: Run }) {
           <div><dt className="muted">等待开始</dt><dd>{time(selected.wait_started_at)}</dd></div>
           <div>
             <dt className="muted">{!measurement ? "执行耗时" : "实测耗时"}</dt>
-            <dd>{!measurement ? elapsed(interval(selected.started_at, selected.finished_at)) : `${measuredSecondsFormat.format(measurement.seconds)} 秒`}</dd>
+            <dd>{!measurement ? elapsed(interval(selected.started_at, selected.finished_at)) : `${measurement.seconds} 秒`}</dd>
           </div>
           {measurement && <div className="col-span-full">
             <dt className="muted">测量范围</dt><dd>{measurement.basis}</dd>

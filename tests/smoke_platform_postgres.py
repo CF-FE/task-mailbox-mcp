@@ -39,6 +39,9 @@ from smoke_mcp import run_http
 PUBLIC = "https://example.test/mailbox"
 API = "/mailbox/api/v1"
 SOURCE_TOKEN = "synthetic-smoke-token"
+# Harness allowance for a whole call (checkout, several statements, commit).
+# PostgreSQL connection, statement and lock budgets are configured separately.
+SMOKE_CALL_TIMEOUT = 90
 KINDS = ["project", "task", "role", "workflow", "delegation", "blocker", "source"]
 LEGACY = {"whoami", "mailbox_usage", "submit_job", "get_job", "list_events", "publish_result",
           "get_result", "request_cancel", "ack_result_read"}
@@ -144,7 +147,7 @@ def cross_store_cursor_order(engine, first):
                 assert not pending.done()
             finally:
                 event.remove(engine, "before_cursor_execute", record_waiter)
-        second_event = pending.result(timeout=15)
+        second_event = pending.result(timeout=SMOKE_CALL_TIMEOUT)
     assert second_event["cursor"] == first_event["cursor"] + 1
     assert second.list_events(cursor=first_event["cursor"] - 1)["events"] == [first_event, second_event]
 
@@ -304,24 +307,8 @@ def test_platform(engine, store):
             async with http.stream("GET", path, headers={"Last-Event-ID": first_id}) as response:
                 assert int((await anext(response.aiter_lines())).removeprefix("id: ")) == int(first_id) + 1
         async with Client(endpoint, auth="legacy-token") as legacy:
-            assert {tool.name for tool in await legacy.list_tools()} == LEGACY | PLATFORM
-            identity = (await legacy.call_tool("whoami")).data
-            assert identity["github_login"] == "legacy" and identity["subject"] == "42"
-            assert identity["service"] == "task-mailbox" and identity["execution_enabled"] is False
-            assert identity["platform_access"] == {"allowed_projects": ["project"], "reporting_sources": []}
-            assert (await legacy.call_tool("mailbox_usage")).data["usage_schema_version"] == 2
-            assert (await legacy.call_tool("get_job", {"job_id": "historical"})).data["job_id"] == "historical"
-            assert (await legacy.call_tool("list_events", {"cursor": 90})).data["events"][0]["cursor"] == 91
-            content = payload()
-            args = {"job_id": "mcp-test", "payload": content, "payload_hash": _hash(_json(content))}
-            assert (await legacy.call_tool("submit_job", args)).data["payload"] == content
-            result = (await legacy.call_tool("publish_result", {"job_id": "mcp-test",
-                "event_id": "mcp-result", "status": "REPORTED_COMPLETED", "result": {"x": "y"}})).data
-            assert (await legacy.call_tool("get_result", {"job_id": "mcp-test"})).data == result
-            assert (await legacy.call_tool("request_cancel", {"job_id": "mcp-test",
-                    "event_id": "mcp-cancel"})).data["event_type"] == "CANCEL_REQUESTED"
-            assert (await legacy.call_tool("ack_result_read", {"job_id": "mcp-test", "event_id": "mcp-ack",
-                    "result_hash": result["result_hash"], "version": 1})).data["event_type"] == "RESULT_READ_ACKNOWLEDGED"
+            await check_legacy_tools(legacy, LEGACY | PLATFORM, 90,
+                                     {"allowed_projects": ["project"], "reporting_sources": []})
         async with Client(endpoint, auth="agent-token") as agent:
             identity = (await agent.call_tool("whoami")).data
             assert identity["platform_access"] == {
@@ -359,6 +346,59 @@ def test_platform(engine, store):
         async with Client(endpoint, auth="other-token") as other:
             assert (await other.call_tool("get_task_trace", {"task_id": "task"}, raise_on_error=False)).is_error
     asyncio.run(run_http(app, check_mcp))
+
+
+async def check_legacy_tools(legacy, expected_tools, cursor, expected_access=None):
+    assert {tool.name for tool in await legacy.list_tools()} == expected_tools
+    identity = (await legacy.call_tool("whoami")).data
+    assert identity["github_login"] == "legacy" and identity["subject"] == "42"
+    assert identity["service"] == "task-mailbox" and identity["execution_enabled"] is False
+    assert identity.get("platform_access") == expected_access
+    assert (await legacy.call_tool("mailbox_usage")).data["usage_schema_version"] == 2
+    assert (await legacy.call_tool("get_job", {"job_id": "historical"})).data["job_id"] == "historical"
+    assert (await legacy.call_tool("list_events", {"cursor": cursor})).data["events"][0]["cursor"] == cursor + 1
+    content = payload()
+    args = {"job_id": "mcp-test", "payload": content, "payload_hash": _hash(_json(content))}
+    assert (await legacy.call_tool("submit_job", args)).data["payload"] == content
+    result = (await legacy.call_tool("publish_result", {"job_id": "mcp-test",
+        "event_id": "mcp-result", "status": "REPORTED_COMPLETED", "result": {"x": "y"}})).data
+    assert (await legacy.call_tool("get_result", {"job_id": "mcp-test"})).data == result
+    assert (await legacy.call_tool("request_cancel", {"job_id": "mcp-test",
+            "event_id": "mcp-cancel"})).data["event_type"] == "CANCEL_REQUESTED"
+    assert (await legacy.call_tool("ack_result_read", {"job_id": "mcp-test", "event_id": "mcp-ack",
+            "result_hash": result["result_hash"], "version": 1})).data["event_type"] == "RESULT_READ_ACKNOWLEDGED"
+
+
+def test_unified_mailbox_gate(engine):
+    store = PostgresStore(engine)
+    content = payload("Dedicated cross-Store fixture")
+    store.submit_job("historical", content, _hash(_json(content)))
+    started = monotonic()
+    cross_store_cursor_order(engine, store)
+    print(f"PASS: cross-Store PostgreSQL lock and ordered cursor visibility ({monotonic() - started:.2f}s)",
+          flush=True)
+
+    auth = StaticTokenVerifier(tokens={
+        "legacy-token": {"client_id": "legacy", "scopes": [], "login": "legacy", "sub": "42"},
+        "other-token": {"client_id": "other", "scopes": [], "login": "other", "sub": "43"},
+    })
+    policy = Policy.model_validate({"viewers": {"legacy": ["project"]}})
+    access = Access(engine, policy, PUBLIC, "synthetic-app", "synthetic-secret", "z" * 64)
+    service = Observations(engine, policy)
+    server = create_server(store, auth, "legacy", (service, access))
+    app = PublicPrefix(PlatformRoutes(
+        server.http_app(path="/mcp", stateless_http=True, json_response=True),
+        build_api(service, access)), "/mailbox")
+
+    async def check(origin):
+        endpoint = origin + "/mailbox/mcp"
+        async with Client(endpoint, auth="legacy-token", timeout=SMOKE_CALL_TIMEOUT) as legacy:
+            await check_legacy_tools(legacy, LEGACY | PLATFORM, 0,
+                                     {"allowed_projects": ["project"], "reporting_sources": []})
+        async with Client(endpoint, auth="other-token", timeout=SMOKE_CALL_TIMEOUT) as other:
+            assert (await other.call_tool("get_job", {"job_id": "historical"}, raise_on_error=False)).is_error
+
+    asyncio.run(run_http(app, check))
 
 
 def test_sqlite_mailbox_with_postgres_platform(engine, directory):
@@ -417,7 +457,10 @@ def test_sqlite_mailbox_with_postgres_platform(engine, directory):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--sqlite-mailbox", action="store_true", help="verify the staged SQLite mailbox and PG platform")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--unified-mailbox-gate", action="store_true",
+                       help="verify cross-Store cursor ordering and the nine legacy PostgreSQL MCP tools")
+    modes.add_argument("--sqlite-mailbox", action="store_true", help="verify the staged SQLite mailbox and PG platform")
     args = parser.parse_args()
     engine = database_engine(os.environ["TASK_PLATFORM_TEST_DATABASE_URL"])
     try:
@@ -441,6 +484,8 @@ def main():
             with TemporaryDirectory() as directory:
                 if args.sqlite_mailbox:
                     test_sqlite_mailbox_with_postgres_platform(engine, directory)
+                elif args.unified_mailbox_gate:
+                    test_unified_mailbox_gate(engine)
                 else:
                     store = mailbox_checks(engine, directory)
                     test_platform(engine, store)
@@ -451,6 +496,9 @@ def main():
                 conn.exec_driver_sql(f"DROP SCHEMA {schema} CASCADE")
     finally:
         engine.dispose()
+    if args.unified_mailbox_gate:
+        print("PASS: unified PostgreSQL mailbox gate and nine legacy MCP tools")
+        return
     if args.sqlite_mailbox:
         print("PASS: SQLite legacy mailbox plus PostgreSQL platform on one app")
         return
