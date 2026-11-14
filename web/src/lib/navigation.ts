@@ -16,11 +16,13 @@ export function useRoute() {
     page: pages.find((page) => page === requestedPage) ?? "overview",
     project: params.get("project"),
     id: params.get("id"),
+    execution: params.get("execution"),
   }
 }
 
-export function href(project: string, page: Page = "overview", id?: string | null) {
+export function href(project: string, page: Page = "overview", id?: string | null, execution?: string | null) {
   const params = new URLSearchParams({ project, view: page })
   if (id) params.set("id", id)
+  if (execution && page === "tasks" && id) params.set("execution", execution)
   return `#${params}`
 }

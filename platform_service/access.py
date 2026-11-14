@@ -14,7 +14,7 @@ from urllib.parse import urlencode, urlsplit
 import httpx2 as httpx
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi.responses import RedirectResponse, Response
-from pydantic import Field, ValidationError
+from pydantic import Field, ValidationError, model_validator
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.routing import Mount, Route
@@ -24,6 +24,13 @@ from .http import APIError
 from .models import DTO, Entity, Id, Session
 
 
+class ExecutionBinding(DTO):
+    project_id: Id
+    task_id: Id
+    run_id: Id
+    execution_id: Id
+
+
 class SourceGrant(DTO):
     projects: set[Id] = Field(min_length=1)
     entity_types: set[Entity] = Field(min_length=1)
@@ -31,11 +38,33 @@ class SourceGrant(DTO):
         default_factory=lambda: {"self_report"}, min_length=1)
     token_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     mcp_login: str | None = None
+    execution: ExecutionBinding | None = None
+
+    @model_validator(mode="after")
+    def execution_credential(self):
+        if self.execution is not None and (
+            self.mcp_login or self.authorities != {"self_report"}
+            or self.projects != {self.execution.project_id}
+            or not self.entity_types <= {"task", "blocker"}
+        ):
+            raise ValueError("execution binding requires a dedicated HTTP self-report grant")
+        return self
 
 
 class Policy(DTO):
     viewers: dict[str, set[Id]] = Field(default_factory=dict)
     sources: dict[Id, SourceGrant] = Field(default_factory=dict)
+    workflow_authors: dict[Id, dict[Id, Id]] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def workflow_author_grants(self):
+        for project, runs in self.workflow_authors.items():
+            for source_id in runs.values():
+                grant = self.sources.get(source_id)
+                if (grant is None or project not in grant.projects or "workflow" not in grant.entity_types
+                        or "native_observation" not in grant.authorities):
+                    raise ValueError("workflow author requires a native source for the project")
+        return self
 
 
 @dataclass(frozen=True)
@@ -80,6 +109,11 @@ class Access:
         for item in policy.sources.values():
             if item.mcp_login and item.authorities != {"self_report"}:
                 raise ValueError("MCP source grants are limited to self-reported observations")
+        if any(grant.execution is not None and not grant.token_sha256 for grant in policy.sources.values()):
+            raise ValueError("execution grant requires a dedicated HTTP credential on the writer")
+        if any(not policy.sources[source_id].token_sha256
+               for runs in policy.workflow_authors.values() for source_id in runs.values()):
+            raise ValueError("workflow author requires a native HTTP credential on the writer")
         return cls(engine, policy, public, client_id, client_secret, signing_key)
 
     def viewer_projects(self, login):

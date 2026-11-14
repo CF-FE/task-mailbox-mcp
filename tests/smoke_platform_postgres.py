@@ -455,12 +455,150 @@ def test_sqlite_mailbox_with_postgres_platform(engine, directory):
         assert connection.exec_driver_sql("SELECT count(*) FROM observation_events").scalar_one() == 1
 
 
+def test_agent_onboarding(engine, schema):
+    from platform_service.local import AUTHORITY, configured_local
+
+    execution = {"project_id": "project", "task_id": "parent", "run_id": "run",
+                 "execution_id": "worker-a"}
+    other_execution = {**execution, "execution_id": "worker-b"}
+    grants = {
+        "shared": {"projects": ["project"], "entity_types": ["task"], "mcp_login": "same-login"},
+        "worker-a": {"projects": ["project"], "entity_types": ["task"], "execution": execution},
+        "worker-b": {"projects": ["project"], "entity_types": ["task"], "execution": other_execution},
+        "scheduler": {"projects": ["project"], "entity_types": ["task", "delegation", "workflow"],
+                      "authorities": ["native_observation"]},
+        "second-host": {"projects": ["project"], "entity_types": ["workflow", "delegation"],
+                        "authorities": ["native_observation"]},
+    }
+    for key in ("worker-a", "worker-b", "scheduler", "second-host"):
+        grants[key]["token_sha256"] = hashlib.sha256(key.encode()).hexdigest()
+    policy = Policy.model_validate({"viewers": {"same-login": ["project"]}, "sources": grants,
+                                    "workflow_authors": {"project": {"run": "scheduler"}}})
+    access = Access(engine, policy, PUBLIC, "app", "secret", "z" * 64)
+    service = Observations(engine, policy)
+
+    def checkpoint(event_id, refs):
+        event = observation(event_id, "task", refs["task_id"], {"next_action": "read original evidence"},
+                            authority="self_report", task_id=refs["task_id"], run_id=refs["run_id"],
+                            execution_id=refs["execution_id"])
+        event["event_type"] = "activity"
+        return event
+
+    def edge(event_id, state, revision):
+        return observation(event_id, "delegation", "edge", {
+            "from_task_id": "parent", "to_task_id": "child",
+            "from_execution_id": "worker-a", "to_execution_id": "worker-b", "state": state,
+        }, task_id="parent", run_id="run", source_revision=revision)
+
+    graph = observation("graph", "workflow", "run", {"kind": "observed", "nodes": [
+        {"id": "child", "label": "Child", "task_id": "child", "execution_id": "worker-b"},
+    ]}, task_id="parent", run_id="run", source_revision=1)
+    with TestClient(build_api(service, access)) as writer:
+        url = "/api/v1/observations/batches"
+
+        def post(source, batch_id, *events):
+            return writer.post(url, json=batch(batch_id, *events, source=source),
+                               headers={"Authorization": f"Bearer {source}"})
+
+        original = post("worker-a", "report-a", checkpoint("event-a", execution))
+        assert original.status_code == 200, original.text
+        assert writer.get(url + "/report-a", headers={"Authorization": "Bearer worker-a"}).json() == original.json()
+        assert writer.get(url + "/report-a", headers={"Authorization": "Bearer worker-b"}).status_code == 404
+        assert post("worker-a", "spoof", checkpoint("spoof", other_execution)).status_code == 403
+        assert post("worker-b", "report-b", checkpoint("event-b", other_execution)).status_code == 200
+        assert post("scheduler", "dispatch", observation("child", "task", "child", {"title": "Child"}),
+                    edge("dispatch", "DISPATCHED", 1), graph).status_code == 200
+        assert post("second-host", "forged-graph", graph).status_code == 403
+        assert post("scheduler", "cancel", edge("cancel", "CANCEL_REQUESTED", 2)).status_code == 200
+
+    shared = AuthorizedSource("shared", policy.sources["shared"])
+    service.ingest(shared, _json(batch("shared-report", checkpoint("claim", execution),
+                                     source="shared")).encode())
+    parent = service.trace({"project"}, "parent", "project", "0", 50, "worker-a").data
+    assert [(event.event_id, event.reporter_binding_verified) for event in parent.events] == [
+        ("event-a", True), ("claim", False)]
+    assert parent.acceptance_status is None and parent.formal_status is None
+    [downstream] = parent.relationships.downstream
+    assert downstream.state == "CANCEL_REQUESTED" and downstream.stopped_at is None
+    child = service.trace({"project"}, "child", "project", "0", 50, "worker-b").data
+    assert child.relationships.upstream == [downstream]
+    assert not service.trace({"project"}, "child", "project", "0", 50, "worker-a").data.relationships.upstream
+    assert service.workflow({"project"}, "run", "project").data.nodes[0].execution_id == "worker-b"
+
+    with TestClient(build_api(service, access)) as writer:
+        conflict = writer.post(url, json=batch("conflict", edge("stopped", "STOPPED", 1), source="second-host"),
+                               headers={"Authorization": "Bearer second-host"})
+        assert conflict.status_code == 200, conflict.text
+
+    for task, execution_id in (("parent", "worker-a"), ("child", "worker-b")):
+        trace = service.trace({"project"}, task, "project", "0", 50, execution_id).data
+        assert not trace.relationships.upstream and not trace.relationships.downstream
+        assert trace.unknown_reasons["delegation:edge"] == "conflicting_source_observations"
+    unrelated = service.trace({"project"}, "child", "project", "0", 50, "unrelated").data
+    assert "delegation:edge" not in unrelated.unknown_reasons
+
+    # Start the real local app factory from files with read-only source metadata.
+    # The sole engine hook confines the separate real connection to our test schema.
+    def local_engine(dsn, *, require_tls):
+        reader_engine = database_engine(dsn, require_tls=require_tls)
+
+        @event.listens_for(reader_engine, "connect")
+        def use_test_schema(dbapi_connection, _record):
+            dbapi_connection.autocommit = True
+            try:
+                dbapi_connection.execute(f"SET search_path TO {schema}")
+            finally:
+                dbapi_connection.autocommit = False
+
+        return reader_engine
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / "index.html").write_text("<title>Monitor</title>")
+        policy_path = root / "reader.json"
+        policy_path.write_text(json.dumps({
+            "sources": {source: {key: value for key, value in grant.items()
+                                 if key not in ("token_sha256", "mcp_login")}
+                        for source, grant in grants.items()},
+            "workflow_authors": {"project": {"run": "scheduler"}},
+        }))
+        writer_path = root / "writer.json"
+        writer_grants = {**grants, "scheduler": {key: value for key, value in grants["scheduler"].items()
+                                                 if key != "token_sha256"}}
+        writer_path.write_text(json.dumps({"sources": writer_grants,
+                                           "workflow_authors": {"project": {"run": "scheduler"}}}))
+        try:
+            Access.from_file(engine, writer_path, PUBLIC, "app", "secret", "z" * 64)
+        except ValueError as error:
+            assert "workflow author requires a native HTTP credential on the writer" in str(error)
+        else:
+            raise AssertionError("Writer accepted a workflow author without a credential")
+        config = root / "config.json"
+        config.write_text(json.dumps({"database_url": engine.url.render_as_string(hide_password=False),
+                                      "policy_path": str(policy_path), "ui_root": str(root),
+                                      "projects": ["project"]}))
+        with patch("platform_service.local.database_engine", side_effect=local_engine):
+            app, read_engine = configured_local(config)
+        try:
+            with TestClient(app, base_url=f"http://{AUTHORITY}", client=("127.0.0.1", 12345)) as reader:
+                result = reader.get(API + "/tasks/child/trace?project_id=project&execution_id=worker-b")
+                assert result.status_code == 200, result.text
+                assert result.json()["data"]["unknown_reasons"]["delegation:edge"] == "conflicting_source_observations"
+                flow = reader.get(API + "/workflows/run?project_id=project")
+                assert flow.status_code == 200 and flow.json()["data"]["nodes"][0]["execution_id"] == "worker-b"
+            with read_engine.connect() as conn:
+                assert conn.exec_driver_sql("SHOW transaction_read_only").scalar_one() == "on"
+        finally:
+            read_engine.dispose()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--unified-mailbox-gate", action="store_true",
                        help="verify cross-Store cursor ordering and the nine legacy PostgreSQL MCP tools")
     modes.add_argument("--sqlite-mailbox", action="store_true", help="verify the staged SQLite mailbox and PG platform")
+    modes.add_argument("--agent-onboarding", action="store_true")
     args = parser.parse_args()
     engine = database_engine(os.environ["TASK_PLATFORM_TEST_DATABASE_URL"])
     try:
@@ -484,6 +622,8 @@ def main():
             with TemporaryDirectory() as directory:
                 if args.sqlite_mailbox:
                     test_sqlite_mailbox_with_postgres_platform(engine, directory)
+                elif args.agent_onboarding:
+                    test_agent_onboarding(engine, schema)
                 elif args.unified_mailbox_gate:
                     test_unified_mailbox_gate(engine)
                 else:
@@ -496,6 +636,9 @@ def main():
                 conn.exec_driver_sql(f"DROP SCHEMA {schema} CASCADE")
     finally:
         engine.dispose()
+    if args.agent_onboarding:
+        print("PASS: agent execution isolation, scoped receipts, direct relationships and workflow author")
+        return
     if args.unified_mailbox_gate:
         print("PASS: unified PostgreSQL mailbox gate and nine legacy MCP tools")
         return

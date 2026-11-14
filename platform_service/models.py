@@ -88,6 +88,12 @@ class TaskFields(DTO):
 
 class DelegationFields(DTO):
     task_id: Id | None = None
+    from_task_id: Id | None = None
+    to_task_id: Id | None = None
+    from_execution_id: Id | None = None
+    to_execution_id: Id | None = None
+    stopped_at: Stamp | None = None
+    resumed_from_execution_id: Id | None = None
     from_role_id: Id | None = None
     to_role_id: Id | None = None
     actual_caller_role_id: Id | None = None
@@ -103,6 +109,8 @@ class Delegation(DelegationFields):
 
 class WorkflowNode(DTO):
     id: Id
+    task_id: Id | None = None
+    execution_id: Id | None = None
     label: Text
     state: Text | None = None
     started_at: Stamp | None = None
@@ -202,6 +210,7 @@ class Observation(DTO):
     run_id: Id | None = None
     step_id: Id | None = None
     role_binding_id: Id | None = None
+    execution_id: Id | None = None
     delegation_id: Id | None = None
     source_revision: Annotated[int, Field(strict=True, ge=0, le=2**63 - 1)] | None = None
     occurred_at: Stamp | None = None
@@ -230,9 +239,15 @@ class Receipt(DTO):
 
 
 class TimelineEvent(Observation):
+    reporter_binding_verified: bool = False
     source_id: Id
     cursor: Cursor
     received_at: Stamp
+
+
+class TaskRelationships(DTO):
+    upstream: list[Delegation] = Field(default_factory=list)
+    downstream: list[Delegation] = Field(default_factory=list)
 
 
 class TaskTrace(TaskFields):
@@ -240,6 +255,7 @@ class TaskTrace(TaskFields):
     project_id: Id
     events: list[TimelineEvent]
     delegations: list[Delegation]
+    relationships: TaskRelationships = Field(default_factory=TaskRelationships)
     evidence: list[Evidence]
     elapsed_seconds: Count | None = None
     execution_seconds: Count | None = None

@@ -81,6 +81,8 @@ export function usePagedSnapshot<T extends z.ZodType>(scope: readonly string[], 
   })
 }
 
-export function scopedPath(path: string, project: string) {
-  return `${path}?${new URLSearchParams({ project_id: project })}`
+export function scopedPath(path: string, project: string, execution?: string | null) {
+  const params = new URLSearchParams({ project_id: project })
+  if (execution) params.set("execution_id", execution)
+  return `${path}?${params}`
 }

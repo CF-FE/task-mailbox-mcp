@@ -224,6 +224,30 @@ class ObservationTests(unittest.TestCase):
         self.assertNotIn(str(self.root), canonical(row))
         self.assertNotIn('never upload', canonical(row))
 
+    def test_execution_mapping_applies_only_to_verified_native_turn(self):
+        mapping = self.settings['sessions']['session-test']
+        mapping.update(execution_id='execution-test', run_id='run-test', turn_id='turn-test')
+        settings_path = self.root / observability.SETTINGS_NAME
+        settings_path.write_text(json.dumps(self.settings))
+        event = {'hook_event_name': 'UserPromptSubmit', 'session_id': 'session-test',
+                 'turn_id': 'turn-test', 'cwd': str(self.root)}
+        observability.capture_hook(self.root, event)
+        observability.capture_hook(self.root, {**event, 'turn_id': 'other-turn'})
+        original, unrelated = self.store.next_batch(self.source)['events']
+        self.assertEqual(original['execution_id'], 'execution-test')
+        self.assertEqual(original['run_id'], 'run-test')
+        self.assertEqual(original['task_id'], 'task-test')
+        self.assertNotIn('execution_id', unrelated)
+        self.assertNotIn('task_id', unrelated)
+        self.assertEqual(original['entity_id'], unrelated['entity_id'])
+
+    def test_execution_mapping_requires_task_run_and_native_turn(self):
+        settings_path = self.root / observability.SETTINGS_NAME
+        self.settings['sessions']['session-test']['execution_id'] = 'execution-test'
+        settings_path.write_text(json.dumps(self.settings))
+        with self.assertRaises(ValueError):
+            observability.load_settings(settings_path)
+
     def test_same_job_second_session_cannot_claim_role(self):
         observed = {'duplicate': False, 'binding': {'job_id': 'job-test'},
                     'session': {'observed_at': '2026-01-01T00:00:00+00:00'}}

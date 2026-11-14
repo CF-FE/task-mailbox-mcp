@@ -72,8 +72,11 @@ def load_settings(path):
     role_fields = {'role_id', 'role_kind', 'cwd'}
     for session_id, row in sessions.items():
         if (not valid_id(session_id) or not isinstance(row, dict)
-                or not role_fields <= row.keys() <= role_fields | {'role_binding_id', 'task_id'}
+                or not role_fields <= row.keys() <= role_fields | {'role_binding_id', 'task_id', 'execution_id', 'run_id', 'turn_id'}
                 or not all(valid_id(row[key]) for key in row.keys() - {'cwd'})
+                or (('execution_id' in row or 'run_id' in row)
+                    and not {'task_id', 'run_id', 'execution_id', 'turn_id'} <= row.keys())
+                or ('turn_id' in row and 'execution_id' not in row)
                 or row['role_kind'] not in {'owner', 'coordinator', 'router', 'worker'}
                 or not isinstance(row['cwd'], str) or not Path(row['cwd']).is_absolute()):
             raise ValueError('invalid exact session observation mapping')
@@ -90,16 +93,16 @@ def note_gap(state_dir):
 
 
 def project_event(settings, entity_type, entity_id, event_type, payload, ref, at, *,
-                  task=None, binding=None, key=None, historical=False):
+                  task=None, binding=None, execution=None, run=None, key=None, historical=False):
     event = {'project_id': settings['project_id'], 'entity_type': entity_type, 'entity_id': entity_id,
              'event_type': event_type, 'observed_at': at, 'occurred_at': None, 'payload': payload,
              'historical': historical,
              'evidence': [{'source_type': 'mac_hook', 'authority': 'native_observation',
                            'ref': ref, 'observed_at': None if historical else at}]}
-    if task is not None:
-        event['task_id'] = task
-    if binding is not None:
-        event['role_binding_id'] = binding
+    for field, value in (('task_id', task), ('role_binding_id', binding),
+                         ('execution_id', execution), ('run_id', run)):
+        if value is not None:
+            event[field] = value
     event['event_id'] = stable_id('ev', [settings['source_id'], key if key is not None else event])
     return event
 
@@ -157,6 +160,8 @@ def capture_hook(state_dir, event, observed=None):
         # A lifecycle event without a turn has no unique native delivery key.
         identity = [key, at] if lifecycle else key
         task = mapping.get('task_id')
+        if 'turn_id' in mapping and mapping['turn_id'] != turn:
+            task = None
         role_binding = mapping.get('role_binding_id')
         if 'role_id' in mapping:
             row = project_event(
@@ -164,7 +169,9 @@ def capture_hook(state_dir, event, observed=None):
                 {'kind': mapping['role_kind'], 'observed_state': states[name], 'latest_action': action,
                  'last_observed_at': at, 'session_ref': session_id,
                  'binding_id': role_binding, 'task_id': task},
-                ref, at, task=task, binding=role_binding, key=identity,
+                ref, at, task=task, binding=role_binding,
+                execution=mapping.get('execution_id') if task else None,
+                run=mapping.get('run_id') if task else None, key=identity,
             )
         else:
             row = project_event(
@@ -228,7 +235,8 @@ def capture_recovery(state_dir, store, settings):
                 if session is None or Path(session[0]).resolve() != Path(mapping['cwd']).resolve():
                     continue
                 _, job_id, state, observed_at = session
-                task = mapping.get('task_id')
+                # Recovery uses a session snapshot, which cannot prove a turn-scoped execution.
+                task = mapping.get('task_id') if 'execution_id' not in mapping else None
                 if job_id and settings['jobs'].get(job_id, {}).get('task_id') != task:
                     task = None
                 binding = mapping.get('role_binding_id')

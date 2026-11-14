@@ -66,7 +66,7 @@ function layout(run: Run) {
   return { nodes, edges, cyclic: cycle.size > 0, incomplete: edges.length < run.edges.length }
 }
 
-function Graph({ run }: { run: Run }) {
+function Graph({ run, project }: { run: Run; project: string }) {
   const [selectedId, setSelectedId] = useState<string>()
   const { nodes, edges, cyclic, incomplete } = useMemo(() => layout(run), [run])
   const selected = run.nodes.find((node) => node.id === selectedId)
@@ -114,6 +114,10 @@ function Graph({ run }: { run: Run }) {
       </label>
       {selected && <>
         <div className="flex flex-wrap items-center gap-2 text-sm"><strong>{selected.label}</strong><Status value={selected.state} /></div>
+        {selected.execution_id && <p className="muted break-content">执行实例 <code>{selected.execution_id}</code></p>}
+        {selected.task_id && <a className="text-link w-fit text-sm" href={href(project, "tasks", selected.task_id, selected.execution_id)}>
+          {selected.execution_id ? "查看实例记录" : "查看节点任务"}
+        </a>}
         <dl className="grid grid-cols-2 gap-3 rounded-lg bg-muted/60 p-3 text-sm lg:grid-cols-4">
           <div><dt className="muted">开始时间</dt><dd>{time(selected.started_at)}</dd></div>
           <div><dt className="muted">结束时间</dt><dd>{time(selected.finished_at)}</dd></div>
@@ -145,7 +149,7 @@ export default function Workflow({ project, id }: { project: string; id: string 
       <Section title={run.kind === "planned" ? "计划图" : run.kind === "observed" ? "本次实际运行" : "运行类型未知"}
         action={run.task_id && <a href={href(project, "tasks", run.task_id)} className="text-link text-sm">返回任务</a>}>
         <p className="muted break-content px-5 py-3">运行 {run.id} · 定义版本 {run.definition_version ?? "未知"}</p>
-        {run.nodes.length ? <Graph run={run} /> : <Empty>来源暂无可展示的节点。</Empty>}
+        {run.nodes.length ? <Graph run={run} project={project} /> : <Empty>来源暂无可展示的节点。</Empty>}
       </Section>
       {run.evidence.length > 0 && <Section title="运行证据"><EvidenceList items={run.evidence} /></Section>}
       <Snapshot observed={snapshot.observed_at} sources={snapshot.sources} />

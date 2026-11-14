@@ -104,8 +104,8 @@ def build_api(service, access, *, local=False):
 
     @app.get("/api/v1/tasks/{task_id}/trace", response_model=Snapshot[TaskTrace])
     def trace(request: Request, task_id: Id, project_id: Id | None = None,
-              cursor: Cursor = "0", limit: Limit = 50):
-        return service.trace(access.projects(request), task_id, project_id, cursor, limit)
+              cursor: Cursor = "0", limit: Limit = 50, execution_id: Id | None = None):
+        return service.trace(access.projects(request), task_id, project_id, cursor, limit, execution_id)
 
     @app.get("/api/v1/workflows/{run_id}", response_model=Snapshot[WorkflowRun])
     def workflow(request: Request, run_id: Id, project_id: Id | None = None):
@@ -222,7 +222,7 @@ def backend_contract():
         "mcp": {
             "get_project_overview": ["project_id", "cursor", "limit"],
             "list_role_activity": ["project_id", "cursor", "limit"],
-            "get_task_trace": ["task_id", "project_id", "cursor", "limit"],
+            "get_task_trace": ["task_id", "project_id", "cursor", "limit", "execution_id"],
             "get_workflow_run": ["run_id", "project_id"],
             "list_blockers": ["project_id", "cursor", "limit"],
             "publish_observation_batch": ["batch"],

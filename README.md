@@ -44,6 +44,8 @@ OAuth 持久值由 `oauth_storage.py` 使用 Fernet 加密，密钥由本服务�
 
 结果状态仅允许 `REPORTED_COMPLETED`、`REPORTED_FAILED`、`UNKNOWN`，表示调用方报告。服务不据此证明模型成功、业务完成或 Herdr 已执行。断线或超时先查原任务，不创建替代执行。
 
+[1.2.0 接入合同](docs/implementation/agent-onboarding.md)说明执行实例上报、原批次回执、直接上下游查询及工作流作者授权。现场客户端与真实任务验证结果单独记录。
+
 ## 开发与部署
 
 Store 测试只需 Python 3.10+ 标准库，在仓库根执行：

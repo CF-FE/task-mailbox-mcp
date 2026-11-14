@@ -121,23 +121,50 @@ const activity = z.object({
   entity_type: id,
   entity_id: id,
   event_type: id,
+  task_id: text,
+  run_id: text,
+  step_id: text,
+  role_binding_id: text,
+  delegation_id: text,
+  execution_id: text,
+  reporter_binding_verified: z.boolean().nullish(),
   occurred_at: time,
   observed_at: isoTime,
   received_at: isoTime,
   historical: z.boolean().default(false),
-  payload: z.object({ summary: text, latest_action: text, action: text, state: text }),
+  payload: z.object({
+    summary: text,
+    latest_action: text,
+    action: text,
+    state: text,
+    reason: text,
+    next_action: text,
+    waiting_on: text,
+    last_progress_at: time,
+    reported_status: state,
+  }),
   evidence,
 })
+export type ActivityEvent = z.infer<typeof activity>
+
 const delegation = z.object({
   id,
+  from_task_id: text,
+  to_task_id: text,
+  from_execution_id: text,
+  to_execution_id: text,
+  resumed_from_execution_id: text,
   from_role_id: text,
   to_role_id: text,
   actual_caller_role_id: text,
   state,
   requested_at: time,
   accepted_at: time,
+  stopped_at: time,
   evidence,
 })
+export type Delegation = z.infer<typeof delegation>
+
 export const traceSchema = taskSummarySchema.extend({
   elapsed_seconds: seconds,
   execution_seconds: seconds,
@@ -146,12 +173,15 @@ export const traceSchema = taskSummarySchema.extend({
   unknown_reasons: reasons,
   events: z.array(activity),
   delegations: z.array(delegation),
+  relationships: z.object({ upstream: z.array(delegation), downstream: z.array(delegation) }).nullish(),
   evidence: z.array(evidenceSchema),
 })
 
 export const stepSchema = z.object({
   id,
   label: z.string(),
+  task_id: text,
+  execution_id: text,
   state,
   started_at: time,
   finished_at: time,

@@ -11,7 +11,7 @@ from mailbox_store import _hash, _json
 from .http import APIError, MAX_BATCH_BYTES
 from .models import (
     FIELDS, Blocker, Delegation, EventHint, ObservationBatch, Overview, Project, Receipt,
-    RoleActivity, Snapshot, Source, TaskSummary, TaskTrace, TimelineEvent, WorkflowRun,
+    RoleActivity, Snapshot, Source, TaskRelationships, TaskSummary, TaskTrace, TimelineEvent, WorkflowRun,
 )
 
 MAX_CURSOR = 2**63 - 1
@@ -22,6 +22,8 @@ TASK_AUTHORITY = {
     "followup_ref": "native_observation",
 }
 SELF_REPORT_FIELDS = {"title", "reported_status"}
+RELATION_ENDPOINTS = ("from_task_id", "to_task_id", "from_execution_id", "to_execution_id")
+DELEGATION_STATES = {"DISPATCHED", "ACCEPTED", "CANCEL_REQUESTED", "STOPPED", "RESUMED"}
 ROLE_ACTIVITY_FIELDS = {"observed_state", "latest_action", "last_observed_at", "task_id"}
 
 
@@ -84,9 +86,17 @@ class Observations:
         if len({event.event_id for event in batch.events}) != len(batch.events):
             raise APIError(422, "INVALID_OBSERVATION", "Batch event IDs must be unique")
 
+        binding = allowed.execution
         bodies = []
         for event in batch.events:
+            if binding is not None and (
+                event.event_type != "activity" or event.historical
+                or (event.project_id, event.task_id, event.run_id, event.execution_id) !=
+                   (binding.project_id, binding.task_id, binding.run_id, binding.execution_id)
+            ):
+                raise APIError(403, "EXECUTION_SCOPE_FORBIDDEN", "Event is outside the reporting execution")
             body = event.model_dump(mode="json")
+            body["reporter_binding_verified"] = binding is not None
             body["payload"] = FIELDS[event.entity_type].model_validate(event.payload).model_dump(
                 mode="json", exclude_unset=True)
             if event.entity_type in {"blocker", "role", "delegation", "workflow"} and event.task_id:
@@ -112,7 +122,24 @@ class Observations:
                 for field, authority in TASK_AUTHORITY.items():
                     if body["payload"].get(field) not in (None, "UNKNOWN") and authority not in authorities:
                         raise APIError(403, "AUTHORITY_FORBIDDEN", f"{field} requires matching evidence authority")
+            if event.entity_type == "delegation" and any(
+                body["payload"].get(field) is not None for field in RELATION_ENDPOINTS
+            ):
+                relation = body["payload"]
+                if "native_observation" not in authorities:
+                    raise APIError(403, "AUTHORITY_FORBIDDEN", "Delegation endpoints require native evidence")
+                if (event.event_type != "snapshot" or not all(relation.get(field) for field in RELATION_ENDPOINTS)
+                        or event.task_id != relation["from_task_id"] or event.source_revision is None
+                        or relation.get("state") not in DELEGATION_STATES):
+                    raise APIError(422, "INVALID_DELEGATION", "Supply complete endpoints, state and source revision")
             if event.entity_type == "workflow":
+                author = self.policy.workflow_authors.get(event.project_id, {}).get(event.entity_id)
+                has_execution_nodes = any(node.get("execution_id") is not None
+                                          for node in body["payload"].get("nodes", []))
+                if (author is not None or has_execution_nodes) and (
+                    source.id != author or "native_observation" not in authorities
+                ):
+                    raise APIError(403, "WORKFLOW_AUTHOR_FORBIDDEN", "Workflow has a configured native author")
                 for node in body["payload"].get("nodes", []):
                     if node.get("measured_duration_seconds") is None:
                         continue
@@ -443,7 +470,7 @@ class Observations:
             raise APIError(409, "AMBIGUOUS_ID", "Specify project_id for this record")
         return matches[0]
 
-    def trace(self, allowed, task_id, project_id, cursor, limit):
+    def trace(self, allowed, task_id, project_id, cursor, limit, execution_id=None):
         after = integer_cursor(cursor)
         if type(limit) is not int or not 1 <= limit <= 200:
             raise APIError(422, "INVALID_LIMIT", "Limit must be 1 through 200")
@@ -453,14 +480,54 @@ class Observations:
             fields, evidence, _, conflicts = groups.get((project, "task", task_id), ({}, [], None, set()))
             rows = conn.exec_driver_sql("""
                 SELECT cursor, source_id, received_at, body FROM observation_events
-                WHERE project_id=%s AND task_id=%s AND cursor>%s ORDER BY cursor LIMIT %s
-            """, (project, task_id, after, limit + 1)).all()
+                WHERE project_id=%s AND task_id=%s AND cursor>%s
+                  AND (%s::text IS NULL OR body->>'execution_id'=%s)
+                ORDER BY cursor LIMIT %s
+            """, (project, task_id, after, execution_id, execution_id, limit + 1)).all()
             events = [TimelineEvent(cursor=str(row.cursor), source_id=row.source_id,
                                     received_at=row.received_at, **row.body) for row in rows[:limit]]
-            delegations = self._merge(self._snapshots(conn, {project}, ["delegation"], task_id=task_id))
+            snapshots = self._snapshots(conn, {project}, ["delegation"])
+            delegations = self._merge([
+                row for row in snapshots if row.body["payload"].get("task_id") == task_id
+                and (execution_id is None or (
+                    row.body["payload"].get("from_task_id") == task_id
+                    and row.body["payload"].get("from_execution_id") == execution_id
+                ))
+            ])
+            native = {}
+            for row in snapshots:
+                values = row.body["payload"]
+                facts = row.body["evidence"]
+                if all(values.get(field) for field in RELATION_ENDPOINTS) and any(
+                    fact["authority"] == "native_observation" for fact in facts
+                ):
+                    edge = Delegation(id=row.entity_id, **{**values, "evidence": facts})
+                    native.setdefault(row.entity_id, []).append(edge)
+            relationships = TaskRelationships()
+            relationship_unknown = {}
+            for delegation_id, candidates in native.items():
+                edge = candidates[0]
+                downstream = any(candidate.from_task_id == task_id
+                                 and execution_id in (None, candidate.from_execution_id)
+                                 for candidate in candidates)
+                upstream = any(candidate.to_task_id == task_id
+                               and execution_id in (None, candidate.to_execution_id)
+                               for candidate in candidates)
+                if not (upstream or downstream):
+                    continue
+                if any(candidate.model_dump(exclude={"evidence"}) != edge.model_dump(exclude={"evidence"})
+                       for candidate in candidates[1:]):
+                    relationship_unknown[f"delegation:{delegation_id}"] = "conflicting_source_observations"
+                    continue
+                if downstream:
+                    relationships.downstream.append(edge)
+                if upstream:
+                    relationships.upstream.append(edge)
             trace = TaskTrace(id=task_id, project_id=project, events=events, evidence=evidence,
+                              relationships=relationships, unknown_reasons=relationship_unknown,
                               delegations=[Delegation(id=key[2], **{**values, "evidence": facts or values.get("evidence", [])})
-                                           for key, (values, facts, _, _) in delegations.items()], **fields)
+                                           for key, (values, facts, _, _) in delegations.items()
+                                           if f"delegation:{key[2]}" not in relationship_unknown], **fields)
             for field, start, end in (
                 ("elapsed_seconds", trace.requested_at, trace.finished_at),
                 ("execution_seconds", trace.started_at, trace.finished_at),
@@ -479,6 +546,9 @@ class Observations:
         with self._read() as (conn, now, watermark):
             project = self._resolve(conn, allowed, project_id, "workflow", run_id)
             rows = self._snapshots(conn, {project}, ["workflow"], entity_id=run_id)
+            author = self.policy.workflow_authors.get(project, {}).get(run_id)
+            if author is not None:
+                rows = [row for row in rows if row.source_id == author]
             # A graph is one source's declared object. Never merge its nodes and edges separately.
             trusted = [(max((PRIORITY[e["authority"]] for e in row.body["evidence"]
                             if e["authority"] != "self_report"), default=0), row) for row in rows]

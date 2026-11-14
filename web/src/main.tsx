@@ -58,7 +58,7 @@ function loginLink(loginUrl?: string) {
   }
 }
 
-function ProjectView({ project, page, id }: { project: Project; page: Page; id: string | null }) {
+function ProjectView({ project, page, id, execution }: { project: Project; page: Page; id: string | null; execution: string | null }) {
   const qc = useQueryClient()
   const overview = usePagedSnapshot(["project", project.id], projectPath(project.id) + "/overview", overviewSchema)
   const roles = usePages(["project", project.id], projectPath(project.id) + "/roles", roleSchema)
@@ -105,7 +105,7 @@ function ProjectView({ project, page, id }: { project: Project; page: Page; id: 
       {(page !== "roles" || forbidden) && <DataState pending={overview.isPending} error={overview.error} cached={!!snapshot} retry={() => void overview.refetch()} />}
       {!forbidden && (page === "roles" ? <RoleActivity project={project.id} tasks={tasks} /> :
         page === "blockers" ? <Blockers project={project.id} roles={roleItems} tasks={tasks} /> :
-        page === "tasks" && id ? <TaskDetail key={id} project={project.id} id={id} roles={roleItems} /> :
+        page === "tasks" && id ? <TaskDetail key={JSON.stringify([id, execution])} project={project.id} id={id} execution={execution} roles={roleItems} /> :
         page === "workflows" && id ? <Suspense fallback={<DataState pending error={null} retry={() => {}} />}>
           <Workflow key={id} project={project.id} id={id} />
         </Suspense> :
@@ -167,7 +167,7 @@ function Catalog({ viewerLabel, allowed }: { viewerLabel: string; allowed: strin
         ? (more ? "当前页未找到该项目，可加载更多项目继续查找。" : "该项目不可用，请从项目列表选择。")
         : "当前会话暂无可查看的项目。"}</Empty></div>}
     </div>}
-    {selected && !forbidden && <ProjectView key={selected.id} project={selected} page={route.page} id={route.id} />}
+    {selected && !forbidden && <ProjectView key={selected.id} project={selected} page={route.page} id={route.id} execution={route.execution} />}
   </>
 }
 

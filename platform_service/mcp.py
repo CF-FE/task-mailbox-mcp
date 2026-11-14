@@ -36,9 +36,9 @@ def add_tools(server, service, access, read, write):
 
     @server.tool(annotations=read)
     def get_task_trace(task_id: Id, project_id: Id | None = None,
-                       cursor: Cursor = "0", limit: int = 50) -> dict:
+                       cursor: Cursor = "0", limit: int = 50, execution_id: Id | None = None) -> dict:
         """Read reported, accepted and formal states with a paginated evidence timeline."""
-        return invoke(service.trace, access.viewer_projects(login()), task_id, project_id, cursor, limit)
+        return invoke(service.trace, access.viewer_projects(login()), task_id, project_id, cursor, limit, execution_id)
 
     @server.tool(annotations=read)
     def get_workflow_run(run_id: Id, project_id: Id | None = None) -> dict:
