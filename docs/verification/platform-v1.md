@@ -1,5 +1,7 @@
 # 协作平台首期验证
 
+本页保留首期部署时点的结果。2026-11-14 后续已完成两条真实登录并按公子指示将 Web 迁到 Mac 本机、关闭 VPS Web，最新状态见[本机监控验证](local-monitor.md)和[登录恢复记录](login-recovery-1.0.1.md)。下文原 `AUTH_FAILED`／待登录结论属于此前快照。
+
 2026-11-14（Asia/Shanghai）。生产部署源码为 `2853f681a5805caed3e20e41e4dd838afd303541`，运行模式为 `UNIFIED`。原信箱、观测与 Web 会话均使用 Win PostgreSQL 18.7。同一 ASGI 应用沿既有 HTTPS 入口提供 16 项 MCP 工具、平台 API 和 Web。原 SQLite 原位留存，已退出生产写入，本轮未创建数据库备份。首期整体验证为 `PARTIAL`。
 
 ## 部署与存储

@@ -1,5 +1,7 @@
 # 部署与接入
 
+2026-11-14 的 Web 部署修订：日常监控由 Mac 本机 `platform_service.local` 提供，只监听 `127.0.0.1:8767`，免登录、只读连接原 Win PostgreSQL。原 VPS 配置 `TASK_PLATFORM_WEB_ENABLED=false`，关闭页面／浏览器登录／查询／SSE，同时保留 MCP、原 OAuth 和来源上报／回执；缺省 `true` 仅用于兼容原部署。具体配置与当前回执见[本机监控](verification/local-monitor.md)。以下 VPS Web 登录步骤保留为旧部署或显式启用场景的说明，不应据此重新启用当前已关闭入口。
+
 目标是在 VPS 运行独立的 task-mailbox MCP，再把同一个 OAuth HTTPS 端点登记到云端和 Mac Codex／Kimi。原信箱和平台升级的实测分别见[验证总览](verification.md)和 [PostgreSQL 部署验证](verification/postgres-platform.md)。本页描述部署步骤。
 
 ## 既有环境与本次落点

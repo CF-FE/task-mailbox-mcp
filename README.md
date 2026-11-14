@@ -2,7 +2,9 @@
 
 本项目唯一维护仓固定为 **[CF-FE/task-mailbox-mcp](https://github.com/CF-FE/task-mailbox-mcp)**，源码、文档、Skill／插件和配置模板在本仓维护，任务在本仓 Issue 与正式 Projects 关联。个人整合仓只保留历史部署副本；后续更新从本仓固定版本交付。
 
-部署在 VPS 的持久任务信箱 MCP，供云端 Dot 与 Mac 上的 Codex／Kimi 客户端通过同一个 OAuth HTTPS 端点收发任务和小结果。任务、结果版本与事件存入 VPS 本地 SQLite；请求超时后可以按原 `job_id` 查询，重复传输沿稳定 ID 去重。
+持久任务信箱与协作监控服务。原 MCP 和观测上报运行在 VPS，监控 Web 运行在 Mac 本机。任务、结果版本与观测统一存入 Win PostgreSQL；Mac SQLite 保留本地台账和缓冲。请求超时后按原 `job_id` 查询，重复传输沿稳定 ID 去重。
+
+本机看板入口为 **http://127.0.0.1:8767/mailbox/ui/**，无需 GitHub 登录，只读访问配置中的项目。Web 经独立的 Mac→Win 局域网连接读取同一数据库。VPS 的页面、Web 登录、查询和 SSE 已关闭，原 MCP 与带来源认证的观测上报继续保留。[本机部署与验证](docs/verification/local-monitor.md)
 
 ```text
 云端 Dot ── OAuth HTTPS MCP ── VPS 持久信箱 ── OAuth HTTPS MCP ── Mac Codex／Kimi
@@ -70,6 +72,10 @@ systemd 模板设置 `MemoryHigh=192M`、`MemoryMax=256M`、`CPUQuota=50%`、`Ta
 目标 Linux／Python 3.14.4 环境的完整依赖见 [requirements.lock.txt](requirements.lock.txt)。宿主准备脚本按锁定文件安装并禁用 pip 缓存；其他开发平台须另核兼容性。
 
 ## 当前验证
+
+当前部署、原任务数据核对、真实认证与未验事项以[验证总览](docs/verification.md)为准。本机监控发布版本为 **1.1.0**，此前 **1.0.1** 完成[原 Mac 桥登录恢复](docs/verification/login-recovery-1.0.1.md)；未升级已有运行依赖。下述记录保留早期 SQLite 信箱与 Mac 适配的历史范围。
+
+### 早期验证记录
 
 Store 的 17 项标准库行为测试已通过；扩大默认值前，VPS 临时回环 MCP 的 9 工具／两个模拟客户端／账号拒绝／OAuth 元数据验证已通过。当前约 240 KiB UTF-8 传输重跑发生 SSH／观察超时，未取得完整回执，保留 UNKNOWN。新独立环境的该测试进程峰值 RSS 为 121444 KiB（约 118.6 MiB）；不是生产容量结论。VPS 独立新虚拟环境已创建，占用 125212 KiB（约 122.3 MiB），主执行侧已在此独立环境复跑 MCP 与 OAuth 存储测试，均通过。
 

@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-2026-11-14（Asia/Shanghai），协作平台已切换到统一 Win PostgreSQL，原信箱数据逐表核对通过。真实 Web OAuth、原 Mac 信箱网络认证、端到端 P95 和 Cloud 路由业务活动仍待验证。最新证据见[协作平台首期验证](verification/platform-v1.md)，数据库部署前置见 [PostgreSQL T1 验证](verification/postgres-platform.md)。
+2026-11-14（Asia/Shanghai），协作平台使用统一 Win PostgreSQL。本机监控 1.1.0 已在 Mac 回环地址启动，免登录读取凡人原任务；VPS Web 已关闭，原 MCP 和来源上报保留。最新运行与浏览器证据见[本机监控验证](verification/local-monitor.md)。此前两条真实登录均已验证，[1.0.1 登录修复记录](verification/login-recovery-1.0.1.md)保留根因与边界。公网连接的间歇性超时、端到端 P95 和 Cloud 路由业务活动仍独立待验，不因本机页面可用推定已通过。初次统一库切换见[协作平台首期验证](verification/platform-v1.md)，数据库部署前置见 [PostgreSQL T1 验证](verification/postgres-platform.md)。
 
 ## 历史记录（截至 2026-11-06）
 
