@@ -31,7 +31,7 @@ class APIError(Exception):
 
 
 def build_api(service, access):
-    app = FastAPI(title="Task Collaboration Platform", version="1.0.0",
+    app = FastAPI(title="Task Collaboration Platform", version="1.0.1",
                   openapi_url="/api/v1/openapi.json", docs_url=None, redoc_url=None,
                   responses={401: {"model": ErrorEnvelope}, 403: {"model": ErrorEnvelope},
                              404: {"model": ErrorEnvelope}, 422: {"model": ErrorEnvelope},

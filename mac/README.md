@@ -86,6 +86,8 @@ python3 mac/install.py \
 
 `login` 才允许用户浏览器完成本桥自己的 OAuth；原授权 URL 先校验同源 HTTPS 与精确 `/authorize` 路径，再直接交给系统浏览器，不另发库的授权页预检 GET。客户端 SDK 日志只保留级别和异常类型，不渲染认证异常正文、参数或堆栈。不读取 Codex／Kimi 的认证缓存。专用缓存加密保存，目录 `0700`、文件 `0600`；正常运行保留同一 client 的静默 refresh。缺缓存或认证明确拒绝停止该分支，不自动重新登录、DCR、换端点或认证方式。OAuth 路径发现也持久保存，重启不把带前缀 token endpoint 简化为站点根路径。
 
+交互登录使用现有服务支持的 `legacy initialize`，避免自动协议探测超时回退时用另一个请求时钟提前取消浏览器回调。回调等待最多 300 秒，登录连接总预算 330 秒；授权后的 `whoami` 和正常 collector 请求仍限时 10 秒。登录进程结束后原回调端口随之关闭，旧浏览器页面不能恢复该次尝试；需由程序重新发起登录，不能反复刷新旧回调地址。依赖回归使用独立运行环境执行 `python tests/smoke_bridge_login.py`，只用模拟 OAuth 与临时状态，不代表生产授权通过。
+
 本桥已完成专用 OAuth 和 whoami 实测，原 nonce 已由 Mac 真实取回、持久入 outbox 并上传；当前桌面会话通过云端 App 读回、核对摘要及 nonce 并确认读取。此前若干尝试的 RemoteProtocolError 不反推为用户拒绝；当前成功也不能推导长期稳定。保留原 job／event，不重新投递；指定云端Dot已报告读取，服务精确 ACK 已直接回读；反方向与持续收件状态见验证记录。
 
 认证发现的两类同源 well-known GET 若在完整响应头前遇到 RemoteProtocolError，每个 client 生命周期最多额外尝试一次，两次共用 10 秒预算。实现固定使用 httpx2 2.16.0 的发送钩子，不替换底层 transport，因此保留环境代理与 TLS；保持原默认不跟随重定向。令牌／注册／refresh／MCP POST、其它 URL、HTTP 错误、超时和响应体错误不走这项重试。既有 outbox 按稳定 event_id 补传的契约不变。

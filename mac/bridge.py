@@ -41,7 +41,7 @@ async def network(args, config, store):
         return await create_client(config['endpoint'], auth_dir, allow_login=args.command == 'login')
     if args.command == 'login':
         async with await factory() as client:
-            await client.call_tool('whoami', {})
+            await client.call_tool('whoami', {}, timeout=10)
         store.set_health('authentication', 'READY', 'Dedicated bridge OAuth and whoami succeeded')
         return {'authentication': 'READY', 'whoami_readback': True}
     if args.command == 'once':

@@ -531,4 +531,11 @@ async def create_client(endpoint, state_directory, *, allow_login=False):
                         client_name="Mac Coordination Bridge", callback_host="127.0.0.1")
     transport = StreamableHttpTransport(endpoint, auth=oauth,
         httpx_client_factory=metadata_client_factory(endpoint))
-    return Client(transport, timeout=10, init_timeout=300 if allow_login else 10)
+    # An auto-negotiation probe can expire while its HTTP task is still doing
+    # OAuth discovery. The fallback initialize then owns a different request
+    # clock, so waiting for browser consent does not pause its 10-second limit.
+    # Login uses the supported legacy handshake and one bounded consent window;
+    # normal collector requests retain their existing short timeout and mode.
+    return Client(transport, timeout=330 if allow_login else 10,
+                  init_timeout=330 if allow_login else 10,
+                  mode='legacy' if allow_login else 'auto')
