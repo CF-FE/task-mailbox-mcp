@@ -12,6 +12,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 
+from . import APP_VERSION
 from .models import (
     FIELDS, Blocker, Cursor, ErrorEnvelope, EventHint, Id, LocalSession, ObservationBatch,
     Overview, Project, Receipt, RoleActivity, Session, Snapshot, TaskTrace, WorkflowRun,
@@ -31,7 +32,7 @@ class APIError(Exception):
 
 
 def build_api(service, access, *, local=False):
-    app = FastAPI(title="Task Collaboration Platform", version="1.2.1",
+    app = FastAPI(title="Task Collaboration Platform", version=APP_VERSION,
                   openapi_url="/api/v1/openapi.json", docs_url=None, redoc_url=None,
                   responses={401: {"model": ErrorEnvelope}, 403: {"model": ErrorEnvelope},
                              404: {"model": ErrorEnvelope}, 422: {"model": ErrorEnvelope},

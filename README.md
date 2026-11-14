@@ -75,7 +75,7 @@ systemd 模板设置 `MemoryHigh=192M`、`MemoryMax=256M`、`CPUQuota=50%`、`Ta
 
 ## 当前验证
 
-**1.2.0** 已发布到 VPS 和 Mac 本机看板，固定源码为 `50cf2f748eaa93a6381042f40b8e273d04f2f8a9`。Win PostgreSQL 统一保存信箱与观测。本机免登录、只读访问配置项目，VPS 继续提供 OAuth MCP 和来源上报，公网 Web 路由已关闭。
+VPS 运行 **1.2.1**，固定源码为 `6389171363d7aa25a6943b77a9731bd21c17a0e0`。Mac 本机看板继续运行 **1.2.0**（`50cf2f748eaa93a6381042f40b8e273d04f2f8a9`）。Win PostgreSQL 统一保存信箱与观测。本机免登录、只读访问配置项目，VPS 继续提供 OAuth MCP 和来源上报，公网 Web 路由已关闭。
 
 认证的服务端工具目录读回 16 项工具，支持按执行实例查询。原生 MCP 读回 8 个任务、8 份结果和 24 条事件。本机 Chromium 已打开五个视图。原桥专用 OAuth 和旧公网 Web 的真实登录在 1.0.1 已验证；原 collector 近期仍有间歇性网络失败。云端工具目录刷新及指定 Dot、本地 Router／Worker、云端 Codex 的新任务闭环仍待核实。
 
