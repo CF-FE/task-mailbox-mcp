@@ -93,6 +93,59 @@ class StorageDiagnosticsTest(unittest.TestCase):
         self.assertEqual(record, {"operation": "get_observation_receipt",
                                   "category": "database_sqlstate", "sqlstate": "55P03"})
 
+    def test_legacy_list_events_logs_sanitized_storage_failure_and_preserves_wire_error(self):
+        import asyncio
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from fastmcp import Client
+        from fastmcp.server.auth.providers.jwt import StaticTokenVerifier
+        from sqlalchemy.exc import OperationalError, TimeoutError
+        from server import create_server
+
+        class DriverError(Exception):
+            def __init__(self, sqlstate):
+                super().__init__("private DSN and driver details")
+                self.sqlstate = sqlstate
+
+        class Store:
+            def list_events(self, cursor, limit, recipient):
+                raise error
+
+        async def request():
+            auth = StaticTokenVerifier(tokens={})
+            server = create_server(Store(), auth, "owner", (None, object()))
+            token = SimpleNamespace(claims={"login": "owner"})
+            with patch("server.get_access_token", return_value=token):
+                async with Client(server, mode="legacy") as client:
+                    return await client.call_tool("list_events", {
+                        "cursor": 24, "limit": 10, "recipient": "private recipient",
+                    }, raise_on_error=False)
+
+        for sqlstate, invalidated, category, code in (
+            ("53100", False, "database_sqlstate", "STORAGE_FULL"),
+            ("55P03", False, "database_sqlstate", "STORAGE_UNAVAILABLE"),
+            (None, True, "connection_invalidated", "STORAGE_UNAVAILABLE"),
+            (None, False, "pool_timeout", "STORAGE_UNAVAILABLE"),
+        ):
+            with self.subTest(category=category, sqlstate=sqlstate):
+                if category == "pool_timeout":
+                    error = TimeoutError("private pool details")
+                else:
+                    error = OperationalError("private SQL", {"recipient": "private parameter"},
+                                             DriverError(sqlstate), connection_invalidated=invalidated)
+                with self.assertLogs("task_mailbox.storage", level="WARNING") as records:
+                    result = asyncio.run(request())
+                self.assertTrue(result.is_error)
+                self.assertEqual(result.content[0].text,
+                                 f"{code}: no success acknowledged; query original job/event IDs")
+                self.assertEqual(len(records.records), 1)
+                self.assertIsNone(records.records[0].exc_info)
+                record = json.loads(records.records[0].getMessage())
+                self.assertRegex(record.pop("request_id"), r"^[0-9a-f]{32}$")
+                self.assertEqual(record, {"operation": "list_events", "category": category,
+                                          "sqlstate": sqlstate})
+
     def test_startup_still_exits_tempfail_and_logs_driver_category(self):
         import os
         import runpy

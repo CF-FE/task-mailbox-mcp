@@ -69,11 +69,14 @@ def create_server(store, auth, allowed_login, platform=None):
     access = platform[1] if platform is not None else None
     server.add_middleware(AccountGuard(allowed_login, access))
     storage_errors = (sqlite3.Error,)
+    storage_diagnostic = None
     if platform is not None:
         from sqlalchemy.exc import SQLAlchemyError
+        from platform_service.storage_diagnostics import log_storage_failure
         storage_errors += (SQLAlchemyError,)
+        storage_diagnostic = log_storage_failure
 
-    def invoke(operation, *args):
+    def invoke(tool_name, operation, *args):
         try:
             return operation(*args)
         except KeyError as error:
@@ -81,10 +84,12 @@ def create_server(store, auth, allowed_login, platform=None):
         except ValueError as error:
             raise ToolError(f"INVALID_REQUEST: {error}") from error
         except storage_errors as error:
+            if storage_diagnostic is not None and isinstance(error, SQLAlchemyError):
+                storage_diagnostic(tool_name, uuid4().hex, error)
             is_full = (getattr(error, "sqlite_errorcode", None) == sqlite3.SQLITE_FULL or
                        getattr(getattr(error, "orig", None), "sqlstate", None) == "53100")
             code = "STORAGE_FULL" if is_full else "STORAGE_UNAVAILABLE"
-            raise ToolError(f"{code}: no success acknowledged; query original job/event IDs") from error
+            raise ToolError(f"{code}: no success acknowledged; query original job/event IDs") from None
 
     read = {"readOnlyHint": True, "destructiveHint": False,
             "idempotentHint": True, "openWorldHint": False}
@@ -109,23 +114,23 @@ def create_server(store, auth, allowed_login, platform=None):
         report_route, explicit target object, and content. The caller's identity
         aliases and authorization text are data, not grants of execution rights.
         """
-        return invoke(store.submit_job, job_id, payload, payload_hash)
+        return invoke("submit_job", store.submit_job, job_id, payload, payload_hash)
 
     @server.tool(annotations=read)
     def mailbox_usage() -> dict:
         """Read bounded-store usage and limits without exposing task data or paths."""
-        return invoke(store.stats)
+        return invoke("mailbox_usage", store.stats)
 
     @server.tool(annotations=read)
     def get_job(job_id: str) -> dict:
         """Read the original job and reported state after a submit timeout."""
-        return invoke(store.get_job, job_id)
+        return invoke("get_job", store.get_job, job_id)
 
     @server.tool(annotations=read)
     def list_events(cursor: int = 0, limit: int = 50,
                     recipient: str | None = None) -> dict:
         """Read events after a persistent cursor. Recipient is a filter, not an ACL."""
-        return invoke(store.list_events, cursor, limit, recipient)
+        return invoke("list_events", store.list_events, cursor, limit, recipient)
 
     @server.tool(annotations=write)
     def publish_result(job_id: str, event_id: str, status: str, result: dict) -> dict:
@@ -135,23 +140,23 @@ def create_server(store, auth, allowed_login, platform=None):
         caller reports. Never substitute a new event ID merely because an ACK
         was lost. The submitted: event namespace is reserved for the service.
         """
-        return invoke(store.publish_result, job_id, event_id, status, result)
+        return invoke("publish_result", store.publish_result, job_id, event_id, status, result)
 
     @server.tool(annotations=read)
     def get_result(job_id: str, version: int | None = None) -> dict:
         """Read an immutable result version and SHA-256; omitted version means latest."""
-        return invoke(store.get_result, job_id, version)
+        return invoke("get_result", store.get_result, job_id, version)
 
     @server.tool(annotations=write)
     def request_cancel(job_id: str, event_id: str) -> dict:
         """Record a cancellation request only; does not stop a process or Agent."""
-        return invoke(store.request_cancel, job_id, event_id)
+        return invoke("request_cancel", store.request_cancel, job_id, event_id)
 
     @server.tool(annotations=write)
     def ack_result_read(job_id: str, event_id: str, version: int,
                         result_hash: str) -> dict:
         """Record a caller's read ACK for an exact version/hash, not acceptance."""
-        return invoke(store.ack_result_read, job_id, event_id, version, result_hash)
+        return invoke("ack_result_read", store.ack_result_read, job_id, event_id, version, result_hash)
 
     if platform is not None:
         from platform_service.mcp import add_tools
