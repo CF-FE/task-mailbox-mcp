@@ -323,6 +323,7 @@ def configured_platform(public, values, signing_key):
     from platform_service.access import Access
     from platform_service.database import REVISION, configured_engine
     from platform_service.observations import Observations
+    from platform_service.storage_diagnostics import log_storage_failure
 
     engine = None
     try:
@@ -339,12 +340,15 @@ def configured_platform(public, values, signing_key):
                                   values["TASK_MAILBOX_GITHUB_CLIENT_SECRET"], signing_key)
         return engine, (Observations(engine, access.policy, stale_seconds), access)
     except OperationalError as error:
+        log_storage_failure("startup", uuid4().hex, error)
         if engine is not None:
             engine.dispose()
         if getattr(error.orig, "sqlstate", None) in {"28000", "28P01", "3D000"}:
             raise ValueError("PostgreSQL credentials or database rejected") from None
         raise StorageStartupError("PostgreSQL connection temporarily unavailable") from None
-    except (SQLAlchemyError, ValueError):
+    except (SQLAlchemyError, ValueError) as error:
+        if isinstance(error, SQLAlchemyError):
+            log_storage_failure("startup", uuid4().hex, error)
         if engine is not None:
             engine.dispose()
         raise ValueError("PostgreSQL or platform policy unavailable. Check private configuration and schema.") from None

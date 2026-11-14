@@ -13,6 +13,7 @@ from starlette.exceptions import HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 
 from . import APP_VERSION
+from .storage_diagnostics import log_storage_failure
 from .models import (
     FIELDS, Blocker, Cursor, ErrorEnvelope, EventHint, Id, LocalSession, ObservationBatch,
     Overview, Project, Receipt, RoleActivity, Session, Snapshot, TaskTrace, WorkflowRun,
@@ -20,6 +21,12 @@ from .models import (
 
 Limit = Annotated[int, Query(ge=1, le=200)]
 MAX_BATCH_BYTES = 1048576
+
+
+STORAGE_OPERATIONS = frozenset({
+    "session", "login", "logout", "callback", "projects", "overview", "roles",
+    "trace", "workflow", "blockers", "events", "batch", "receipt",
+})
 
 
 class APIError(Exception):
@@ -60,6 +67,10 @@ def build_api(service, access, *, local=False):
 
     @app.exception_handler(SQLAlchemyError)
     def storage_error(request, error):
+        endpoint = request.scope.get("endpoint")
+        operation = getattr(endpoint, "__name__", "")
+        log_storage_failure(operation if operation in STORAGE_OPERATIONS else "unknown",
+                            request.state.request_id, error)
         return error_response(APIError(503, "STORAGE_UNAVAILABLE",
                                        "Storage unavailable. Reconcile using the original IDs.", True),
                               request.state.request_id)
