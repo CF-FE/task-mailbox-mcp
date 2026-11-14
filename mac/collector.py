@@ -24,6 +24,7 @@ class AuthFailed(RuntimeError):
     """Existing bridge authorization was rejected; interactive login is required."""
 
 
+COLLECTOR_OPEN_TIMEOUT = 30
 COLLECTOR_CALL_TIMEOUT = 75
 COLLECTOR_ROUND_TIMEOUT = 155
 
@@ -573,13 +574,14 @@ async def create_client(endpoint, state_directory, *, allow_login=False):
     token_endpoint = saved["oauth"].get("token_endpoint") if not allow_login and saved else None
     transport = StreamableHttpTransport(endpoint, auth=oauth,
         httpx_client_factory=metadata_client_factory(
-            endpoint, observe=record_attempt if not allow_login else None, token_endpoint=token_endpoint))
+            endpoint, observe=record_attempt if not allow_login else None, token_endpoint=token_endpoint,
+            metadata_timeout=10 if allow_login else COLLECTOR_OPEN_TIMEOUT))
     # An auto-negotiation probe can expire while its HTTP task is still doing
     # OAuth discovery. The fallback initialize then owns a different request
-    # clock, so waiting for browser consent does not pause its 10-second limit.
+    # clock, so waiting for browser consent does not pause its negotiation limit.
     # Login uses the supported legacy handshake and one bounded consent window;
     # Normal collector requests retain auto negotiation and its own limit.
     client = Client(transport, timeout=330 if allow_login else COLLECTOR_CALL_TIMEOUT,
-                  init_timeout=330 if allow_login else 10,
+                  init_timeout=330 if allow_login else COLLECTOR_OPEN_TIMEOUT,
                   mode='legacy' if allow_login else 'auto')
     return client

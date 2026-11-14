@@ -11,7 +11,7 @@ import time
 import httpx2
 
 
-def metadata_client_factory(endpoint, *, observe=None, token_endpoint=None):
+def metadata_client_factory(endpoint, *, observe=None, token_endpoint=None, metadata_timeout=30):
     url = httpx2.URL(endpoint)
     prefix = url.path.removesuffix('/mcp')
     origin = (url.scheme, url.host, url.port)
@@ -58,7 +58,7 @@ def metadata_client_factory(endpoint, *, observe=None, token_endpoint=None):
             if not eligible:
                 return await super()._send_single_request(request)
             # Both attempts share this deadline; caller budgets may be shorter.
-            async with asyncio.timeout(10):
+            async with asyncio.timeout(metadata_timeout):
                 try:
                     response = await super()._send_single_request(request)
                 except httpx2.RemoteProtocolError:

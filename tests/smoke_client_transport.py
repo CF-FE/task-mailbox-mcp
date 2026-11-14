@@ -109,16 +109,19 @@ class MetadataTransportTests(unittest.IsolatedAsyncioTestCase):
         original_timeout = asyncio.timeout
         async with metadata_client_factory('https://mcp.example.com/mailbox/mcp')() as client:
             with patch.object(httpx2.AsyncClient, '_send_single_request', sender):
-                with patch('metadata_transport.asyncio.timeout', lambda _: original_timeout(0.02)):
+                with patch('metadata_transport.asyncio.timeout',
+                           side_effect=lambda _: original_timeout(0.02)) as deadline:
                     with self.assertRaises(TimeoutError):
                         await client.send(request)
         self.assertEqual(1, sender.await_count)
         self.assertTrue(reply.is_closed)
+        deadline.assert_called_once_with(30)
 
     async def test_bridge_oauth_preflight_and_mcp_share_narrow_factory(self):
         from collector import create_client
         with tempfile.TemporaryDirectory() as temporary:
             bridge = await create_client('https://mcp.example.com/mailbox/mcp', Path(temporary) / 'oauth', allow_login=True)
+            self.assertEqual(bridge._init_timeout, 330)
             factory = bridge.transport.httpx_client_factory
             self.assertIs(factory, bridge.transport.auth.httpx_client_factory)
             request = httpx2.Request('GET', 'https://mcp.example.com/.well-known/oauth-authorization-server/mailbox')
@@ -127,6 +130,26 @@ class MetadataTransportTests(unittest.IsolatedAsyncioTestCase):
                 with patch.object(httpx2.AsyncClient, '_send_single_request', sender):
                     self.assertEqual(200, (await client.send(request)).status_code)
             self.assertEqual(2, sender.await_count)
+
+    async def test_worker_sdk_has_distinct_open_and_tool_budgets(self):
+        from types import SimpleNamespace
+        from cryptography.fernet import Fernet
+        from fastmcp.client.auth.oauth import TokenStorageAdapter
+        from key_value.aio.wrappers.encryption import FernetEncryptionWrapper
+        from collector import Limits, create_client
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'oauth').mkdir()
+            (root / 'client.key').write_bytes(Fernet.generate_key())
+            with (patch.object(FernetEncryptionWrapper, 'get', AsyncMock(return_value={'oauth': {}})),
+                  patch.object(TokenStorageAdapter, 'get_tokens', AsyncMock(return_value=object())),
+                  patch.object(TokenStorageAdapter, 'get_client_info',
+                               AsyncMock(return_value=SimpleNamespace(client_secret_expires_at=None)))):
+                worker = await create_client('https://mcp.example.com/mailbox/mcp', root)
+            self.assertEqual(worker._init_timeout, 30)
+            self.assertEqual(worker._session_kwargs['read_timeout_seconds'], 75)
+            self.assertEqual((Limits().call_timeout, Limits().round_timeout), (75, 155))
 
     async def test_login_hands_authorization_to_browser_without_headless_get(self):
         from collector import create_client

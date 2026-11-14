@@ -1,3 +1,3 @@
 """Task Mailbox application release metadata."""
 
-APP_VERSION = "1.2.4"
+APP_VERSION = "1.2.5"
