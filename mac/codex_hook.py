@@ -13,6 +13,7 @@ import sys
 from config import DEFAULT_CONFIG, in_scope, load_config, open_store
 from approval_hook import run_approval_hook
 from tracking import hook_tracking_view
+from observability import capture_hook
 
 
 def draft_path(config, session_id):
@@ -34,6 +35,14 @@ def handle_hook(config, event, store):
     observed = store.record_hook(event)
     name = event.get('hook_event_name')
     binding = observed.get('binding')
+    try:
+        return _apply_hook(config, event, store, binding, name)
+    finally:
+        # Commit the original bridge effects before optional local monitoring.
+        capture_hook(Path(config['state_dir']), event, observed)
+
+
+def _apply_hook(config, event, store, binding, name):
     approval = run_approval_hook(config, event)
     if name == 'Stop' and binding:
         path = draft_path(config, event['session_id'])
@@ -93,6 +102,9 @@ def main():
         event = json.loads(raw)
         config = load_config(args.config)
         if not in_scope(config, event.get('cwd') if isinstance(event, dict) else None):
+            # Exact private observations can follow an original session outside
+            # bridge roots without opening the bridge ledger or applying hooks.
+            capture_hook(Path(config['state_dir']), event)
             output = {}
         else:
             output = handle_hook(config, event, open_store(config))

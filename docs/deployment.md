@@ -1,6 +1,8 @@
 # 部署与接入
 
-目标是在 VPS 运行独立的 task-mailbox MCP，再把同一个 OAuth HTTPS 端点登记到云端和 Mac Codex／Kimi。部署前后的证据只在 [verification.md](verification.md)汇总；本页描述步骤，不表示已经执行。
+2026-11-14 的 Web 部署修订：日常监控由 Mac 本机 `platform_service.local` 提供，只监听 `127.0.0.1:8767`，免登录、只读连接原 Win PostgreSQL。原 VPS 配置 `TASK_PLATFORM_WEB_ENABLED=false`，关闭页面／浏览器登录／查询／SSE，同时保留 MCP、原 OAuth 和来源上报／回执；缺省 `true` 仅用于兼容原部署。具体配置与当前回执见[本机监控](verification/local-monitor.md)。以下 VPS Web 登录步骤保留为旧部署或显式启用场景的说明，不应据此重新启用当前已关闭入口。
+
+目标是在 VPS 运行独立的 task-mailbox MCP，再把同一个 OAuth HTTPS 端点登记到云端和 Mac Codex／Kimi。原信箱和平台升级的实测分别见[验证总览](verification.md)和 [PostgreSQL 部署验证](verification/postgres-platform.md)。本页描述部署步骤。
 
 ## 既有环境与本次落点
 
@@ -12,10 +14,10 @@
 | 新服务监听 | `127.0.0.1:8766`，首次启动前核端口未占用 |
 | 外部 MCP 地址 | `https://<PUBLIC_HOST>/mailbox/mcp`；占位主机名，路由已验、受保护工具待验 |
 | 公网入口 | 复用获准 HTTPS／反向代理能力，保留既有路径；不直接公开回环服务 |
-| 持久数据 | VPS 本机磁盘中的 SQLite、OAuth 状态及稳定密钥；不提交仓库、不放网络共享盘 |
+| 持久数据 | 原信箱使用 VPS 本机 SQLite。平台切换后业务库使用 Win PostgreSQL，OAuth 状态及稳定密钥继续留 VPS |
 | 客户端 | 云端 Dot、Mac Codex／Kimi 使用同一个对外端点，各自完成 OAuth 授权 |
 
-`<PUBLIC_HOST>`、`<APP_DIR>`、`<STATE_DIR>`、`<ENV_FILE>` 均为示意占位值，不是宿主当前配置。具体环境变量与单元参数以 [.env.example](../.env.example)、[systemd 单元](../deployment/task-mailbox.service)和 [Caddy 路由示例](../deployment/caddy-route.example)为准；这些模板同样不代表已安装配置。
+`<PUBLIC_HOST>`、`<APP_DIR>`、`<STATE_DIR>`、`<ENV_FILE>` 均为示意占位值。基础环境变量及单元参见 [.env.example](../.env.example)和 [systemd 模板](../deployment/task-mailbox.service)。HTTPS 路由以宿主既有入口的实际配置为准。
 
 ## 1. 只读预检
 
@@ -39,9 +41,9 @@ python3 -m venv .venv
 
 `smoke_oauth_storage.py` 使用临时目录验证加密持久化、稳定密钥重开和拒写预算，不读生产 OAuth 数据。VPS 独立新环境现已创建，实际占用 125212 KiB（约 122.3 MiB），主执行侧曾在该环境复跑两项 MCP／OAuth 存储测试通过；后续服务启动与客户端状态见[当前验证记录](verification.md)。
 
-应用进程使用专用低权限运行身份，状态目录只允许该身份及获准管理员访问。SQLite 使用本机持久磁盘、rollback journal 和同步 FULL；备份时使用 SQLite 支持的一致性方式，不把数据库复制到共享目录供多机并发读写。
+应用进程使用专用低权限运行身份，状态目录只允许该身份及获准管理员访问。原 SQLite 使用本机持久磁盘、rollback journal 和同步 FULL。
 
-结果直接存 SQLite，无额外结果文件双写。服务没有自动清理记录、重派任务或外部执行功能；容量不足时应明确写入失败，不能把失败写成持久接收成功。
+切换前结果直接存 SQLite。服务没有额外结果文件双写，也不自动清理记录、重派任务或执行外部操作。容量不足时应明确写入失败。
 
 可采用 [prepare-host.sh](../deployment/prepare-host.sh)准备独立运行账户、源码、虚拟环境和 systemd 单元，并将 [configure-private.py](../deployment/configure-private.py)复制到模板默认应用目录。准备脚本不启动或公开服务、不登记客户端；仅在新服务环境文件尚不存在时生成其独立签名密钥。不要为部署读取、复制或改写用户其他已有密钥；新服务 OAuth 配置按下节由公子在宿主 TTY 填入，登录授权由公子完成。
 
@@ -93,9 +95,9 @@ systemd 的进程重启只恢复信箱服务，不触发任务执行，也不拉
 
 ## 5. HTTPS 前缀与认证路由
 
-新增 `/mailbox/` 路由时保留既有 Gitee 路由，并先验证反向代理配置，再采用目标服务支持的安全 reload。需要同时核实：
+沿既有 HTTPS 入口检查 `/mailbox/` 路由并保留 Gitee 路径。只有确需调整入口配置时才校验并按现有服务方式 reload。需要同时核实：
 
-- Caddy 模板对新入口请求体设置 `4MB` 上限；此为 HTTP 包络限制，不替代 Store 的单份内容字节检查。
+- 入口请求体的实际限制能容纳 MCP 包络，业务内容仍由 Store 核验单份字节上限。
 - 外部 `/mailbox/mcp` 到回环 MCP 路径的前缀处理，避免重复或遗漏路径。
 - OAuth 元数据、授权、令牌和回调地址采用正确的外部 HTTPS host／scheme／前缀。
 - MCP 的认证挑战与授权服务器发现可由真实客户端读取，回调不会落到 Gitee 或其他应用。
@@ -113,6 +115,26 @@ systemd 的进程重启只恢复信箱服务，不触发任务执行，也不拉
 
 最后按 [双向验证步骤](verification.md#双向-nonce-验证)执行一轮数据闭环：Dot 提交，Mac 读取并回传，Dot 读取并核精确版本／摘要；再由 Mac 提交、Dot 回传、Mac 读取。分别记录调用者、原任务、版本与实际读取。只连接到 MCP 不会自动通知、唤醒或派发本地任务。
 
+## 协作平台切换到 PostgreSQL
+
+2026-11-14 已完成统一 Win PostgreSQL 切换，当前生产使用 `TASK_MAILBOX_STORAGE_ENGINE=postgresql`。原信箱三表摘要和游标核对通过，原 SQLite 原位保留且不再生产写入。两次早期远端 smoke 的失败、定向补测与实际切换分别记在[首期验证](verification/platform-v1.md)，浏览器认证与 P95 仍待验。更新现有统一实例时保留 PostgreSQL 模式，不重复导入原库或直接采用下述分阶段配置。
+
+### 可选分阶段部署（仅适用于尚未迁移的 SQLite 实例）
+
+1. 准备固定应用版本、[平台依赖锁定文件](../requirements-platform.lock.txt)和 [Web 生产构建](../web/README.md)。核对 VPS 到 Win 专用回环转发与 `verify-full` TLS。向测试进程私下注入独立 `_test` 库的 `TASK_PLATFORM_TEST_DATABASE_URL`，用固定解释器运行 `python tests/smoke_platform_postgres.py --sqlite-mailbox`。测试创建并清理本次专用临时 schema，测试库可保留其他 schema。测试凭据及目标不进入生产单元。
+2. 从私有配置向迁移进程注入生产 `TASK_PLATFORM_DATABASE_URL`，在固定应用目录用独立解释器运行 `python -m platform_service.migrate upgrade`。本阶段只升级目标 schema，保留原 SQLite 的 jobs、events、results，不运行 `import-mailbox`。
+3. 在既有 systemd 单元的 drop-in 中增加 `[Service]` 的 `EnvironmentFile=<PRIVATE_RUNTIME_ENV>`，保留原 OAuth 环境文件。私有 `runtime.env` 设置 `TASK_MAILBOX_STORAGE_ENGINE=sqlite`、`TASK_PLATFORM_DATABASE_URL`、`TASK_PLATFORM_ACCESS_FILE` 和 `TASK_PLATFORM_UI_ROOT`。访问策略按项目限定查看者和来源，Web 路径为包含 `index.html` 的绝对构建目录。切换前以实际服务身份核所需文件可读、每级父目录可遍历以及 PostgreSQL revision；root 预检不能替代该检查，环境文件中的凭据仍仅由 systemd 读取。
+4. 沿原入口启动固定版本。同一 ASGI 应用提供 16 项 MCP 工具、平台 API 和 `/mailbox/ui/`，复用现有 HTTPS 前缀与 OAuth 回调。启动必须连通 PostgreSQL 并校验 Alembic revision。启动后原九项信箱工具读写同一原 SQLite，平台观测和 Web 会话使用 PostgreSQL。PG 不可用会影响平台路径，也可能阻止整服务启动或重启。
+5. 回读原九项工具、已知 job／结果／游标和原 SQLite 单写入口，再验证新工具、项目权限、浏览器 OAuth、静态资源及 SSE。Mac 观测接入沿[原协调桥](../mac/README.md#可选的协作平台观测)办理。验收分别记录实际平台路径和延迟。
+
+### 统一迁移（用于尚未迁移的实例）
+
+在独立测试库以默认模式运行 `python tests/smoke_platform_postgres.py`，按实际失败部位修复和补测。`--unified-mailbox-gate` 可单独核跨 Store 数据库行锁、游标提交顺序和原九项 MCP 工具；它不覆盖迁移及 24 次并发写入，需与这些检查的既有通过证据分别记录。切换窗口暂停原信箱写入并排空事务，在已升级目标运行 `python -m platform_service.migrate import-mailbox --source "<ORIGINAL_SQLITE_FILE>"`。原位 SQLite 只读打开，事务导入 jobs、events、results 并对照计数、摘要和游标高水位。公子已排除数据库备份，保留原库，不生成备份或 dump。核对通过后才将 `TASK_MAILBOX_STORAGE_ENGINE` 改为 `postgresql`，沿原入口恢复并回归客户端。
+
+信箱切到 PostgreSQL 后，`mailbox_usage` 返回 v2 诊断。256 MiB 是业务库告警阈值，单份内容和 job 数仍使用原硬上限。届时 PostgreSQL 成为唯一业务库，Mac SQLite 继续保留本地状态与待补传。
+
 ## 回退与保留
 
 新路由或服务失败时，保全 SQLite、OAuth 状态和脱敏证据，停止受影响的新配置步骤。仅撤回本次新增的服务／路由，不删除既有 Gitee 或业务资源，不迁移 UNKNOWN 任务或更换执行入口。认证明确失败时保留原因，由原身份配置负责人处理。
+
+信箱切到 PostgreSQL 后，只有确认 PostgreSQL 没有新增信箱提交时才可直接恢复原 SQLite 信箱。已有新增信箱提交时，以 PostgreSQL 为权威。需要切回时按 [ADR-001](decisions/001-task-collaboration-platform.md#切换过程)先停写，完成回迁、摘要和游标核对，并验证原 SQLite 页预算。平台观测数据保留在 PostgreSQL。

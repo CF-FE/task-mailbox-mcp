@@ -9,11 +9,34 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest.mock import AsyncMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from mac.bridge_store import BridgeStore
-from mac.collector import (AuthFailed, AuthRequired, Limits, collect_once,
+from mac.collector import (AuthFailed, AuthRequired, Budget, BudgetExhausted, Limits, collect_once,
                            create_client, run_collector)
+
+
+class BudgetTests(unittest.IsolatedAsyncioTestCase):
+    async def test_default_rpc_and_round_allow_slow_operations_without_resetting(self):
+        rpc = AsyncMock(return_value={})
+        deadlines = []
+
+        async def wait(call, timeout):
+            deadlines.append(timeout)
+            return await call
+
+        clock = SimpleNamespace(monotonic=lambda: 0)
+        with patch('mac.collector.time', clock), patch('mac.collector.asyncio.wait_for', wait):
+            budget = Budget(rpc, Limits())
+            for t in (0, 70, 140):
+                clock.monotonic = lambda: t
+                await budget.call('list_events', {})
+            clock.monotonic = lambda: 155
+            with self.assertRaises(BudgetExhausted):
+                await budget.call('list_events', {})
+        self.assertEqual(deadlines, [75, 75, 15])
+        self.assertEqual(rpc.await_count, 3)
 
 
 def digest(value):

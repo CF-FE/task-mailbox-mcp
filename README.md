@@ -2,7 +2,9 @@
 
 本项目唯一维护仓固定为 **[CF-FE/task-mailbox-mcp](https://github.com/CF-FE/task-mailbox-mcp)**，源码、文档、Skill／插件和配置模板在本仓维护，任务在本仓 Issue 与正式 Projects 关联。个人整合仓只保留历史部署副本；后续更新从本仓固定版本交付。
 
-部署在 VPS 的持久任务信箱 MCP，供云端 Dot 与 Mac 上的 Codex／Kimi 客户端通过同一个 OAuth HTTPS 端点收发任务和小结果。任务、结果版本与事件存入 VPS 本地 SQLite；请求超时后可以按原 `job_id` 查询，重复传输沿稳定 ID 去重。
+持久任务信箱与协作监控服务。原 MCP 和观测上报运行在 VPS，监控 Web 运行在 Mac 本机。任务、结果版本与观测统一存入 Win PostgreSQL；Mac SQLite 保留本地台账和缓冲。请求超时后按原 `job_id` 查询，重复传输沿稳定 ID 去重。
+
+本机看板入口为 **http://127.0.0.1:8767/mailbox/ui/**，无需 GitHub 登录，只读访问配置中的项目。Web 经独立的 Mac→Win 局域网连接读取同一数据库。VPS 的页面、Web 登录、查询和 SSE 已关闭，原 MCP 与带来源认证的观测上报继续保留。[本机部署与验证](docs/verification/local-monitor.md)
 
 ```text
 云端 Dot ── OAuth HTTPS MCP ── VPS 持久信箱 ── OAuth HTTPS MCP ── Mac Codex／Kimi
@@ -12,6 +14,8 @@
 VPS 服务只收发和保存数据。本仓新增 [Mac 协调桥](mac/README.md)，主动拉取事件、保存本机台账、感知配置范围内的 Codex 会话并补传显式结果。桥不自动执行任务，不增加 AI 层，不保证唤醒 Dot；Mac 的 Herdr 控制与项目执行沿既有入口；[Herdr仓Lead显式执行适配器](https://github.com/CF-FE/herdr-4-codexcloud/blob/main/docs/herdr-executor.md)已取得一次Mac合成执行／回传的限定工程验收，自动消费／无人值守派发及Win／Cloud扩展仍未实现或未验。提交、结果报告、读取确认和生产业务验收分别留证。
 
 后续项目协作的统一查看、派发前核读、原仓库资产归属、Iteration 和结果关联，见[Projects 关联契约](docs/projects.md)。正式状态沿原 Projects／任务正文维护；信箱保留固定引用。
+
+重构方案见 [ADR-001：协作监控与数据共享平台](docs/decisions/001-task-collaboration-platform.md)（Accepted，2026-11-14）：统一业务数据库部署到 Win，新增 Web、角色／任务／工作流观测及配套 Skill；人工解阻接口后续启用。本轮不安排数据库备份，实际安装和部署以验证记录为准。
 
 ## 组件名称
 
@@ -39,6 +43,8 @@ OAuth 持久值由 `oauth_storage.py` 使用 Fernet 加密，密钥由本服务�
 任务须包含固定 `job_id`、规范化 JSON 的 `payload_hash`，以及版本、来源任务、发件者、收件者、报告路由、显式目标和正文。字段与状态含义见 [SPEC.md](SPEC.md)。`submitted:` 为系统事件 ID 的保留前缀，客户端事件不能使用。
 
 结果状态仅允许 `REPORTED_COMPLETED`、`REPORTED_FAILED`、`UNKNOWN`，表示调用方报告。服务不据此证明模型成功、业务完成或 Herdr 已执行。断线或超时先查原任务，不创建替代执行。
+
+[1.2.0 接入合同](docs/implementation/agent-onboarding.md)说明执行实例上报、原批次回执、直接上下游查询及工作流作者授权。现场客户端与真实任务验证结果单独记录。
 
 ## 开发与部署
 
@@ -69,11 +75,9 @@ systemd 模板设置 `MemoryHigh=192M`、`MemoryMax=256M`、`CPUQuota=50%`、`Ta
 
 ## 当前验证
 
-Store 的 17 项标准库行为测试已通过；扩大默认值前，VPS 临时回环 MCP 的 9 工具／两个模拟客户端／账号拒绝／OAuth 元数据验证已通过。当前约 240 KiB UTF-8 传输重跑发生 SSH／观察超时，未取得完整回执，保留 UNKNOWN。新独立环境的该测试进程峰值 RSS 为 121444 KiB（约 118.6 MiB）；不是生产容量结论。VPS 独立新虚拟环境已创建，占用 125212 KiB（约 122.3 MiB），主执行侧已在此独立环境复跑 MCP 与 OAuth 存储测试，均通过。
+VPS 提供 OAuth MCP 和来源上报，公网 Web 路由关闭。Mac 本机看板免登录，只读访问配置项目。两端使用同一 Win PostgreSQL。
 
-VPS 进程与 HTTPS 已实测。初次独立包被界面标记为“仅限桌面端”，公子已卸载；现改用公子在 ChatGPT 原生注册的 App 连接作为唯一 Task Mailbox 入口。当前桌面会话已发现该云端连接的九项工具，并直接调用 whoami／mailbox_usage 成功；指定 Dot 的只读成功归公子回报；Mac 桥授权、原 nonce 收件回传与当前会话经云端 App 的结果读取已实测，指定 Dot 的结果读取归公子回报且服务精确 ACK 已回读，反方向与业务验收仍分别取证。Mac Codex 原有直接 OAuth 失败与新 App 连接不是同一分支；真实状态见唯一入口 [docs/verification.md](docs/verification.md)。
-
-[Mac 适配实现](mac/README.md)已完成并独立安装：台账、collector、钩子、CLI 与安装器共通过 135 项本地测试（含原服务 17 项）。七类钩子定义已写入，原生信任与实际触发、收件桥授权及长期运行分别验收；当前状态统一见验证记录。[事件与钩子方案](docs/hooks.md)保留完整边界，不授予自动执行权限。
+实际运行版本、原信箱和平台观测的验证结果见[验证总览](docs/verification.md)，旧登录回执与早期 SQLite 验证保留在对应的历史章节。
 
 本仓库公开。只提交源码、依赖声明、文档及占位配置；令牌、私钥、OAuth 密钥／状态、数据库、真实连接配置和原始宿主输出保存在各自受限运行目录。
 

@@ -8,6 +8,8 @@ import json
 import math
 import os
 from pathlib import Path
+import socket
+import ssl
 import stat
 import sqlite3
 import time
@@ -20,6 +22,11 @@ class AuthRequired(RuntimeError):
 
 class AuthFailed(RuntimeError):
     """Existing bridge authorization was rejected; interactive login is required."""
+
+
+COLLECTOR_OPEN_TIMEOUT = 30
+COLLECTOR_CALL_TIMEOUT = 75
+COLLECTOR_ROUND_TIMEOUT = 155
 
 
 class BudgetExhausted(RuntimeError):
@@ -35,8 +42,8 @@ class Limits:
     page_size: int = 25
     pages: int = 4
     rpc: int = 10
-    call_timeout: float = 10
-    round_timeout: float = 20
+    call_timeout: float = COLLECTOR_CALL_TIMEOUT
+    round_timeout: float = COLLECTOR_ROUND_TIMEOUT
 
     def __post_init__(self):
         for name, maximum in (("page_size", 100), ("pages", 20), ("rpc", 100)):
@@ -154,6 +161,32 @@ def _failure(error, stage):
     kind = type(error).__name__
     safe_type = kind if kind in ERROR_TYPES else "UNKNOWN"
     return state, f"{cause} stage:{safe_stage} type:{safe_type}"
+
+
+def _client_open_detail(error, elapsed_ms, attempt):
+    """Return only bounded stage, exception and status metadata."""
+    chain = list(_error_chain(error))
+    known = ERROR_TYPES | TRANSPORT_ERROR_NAMES | {"gaierror", "SSLError", "SSLCertVerificationError",
+                                                  "HTTPStatusError", "MCPError"}
+    kinds = list(dict.fromkeys(type(item).__name__ if type(item).__name__ in known else "UNKNOWN"
+                               for item in chain))
+    category = "UNKNOWN"
+    if any(isinstance(item, socket.gaierror) for item in chain):
+        category = "DNS"
+    elif any(isinstance(item, ssl.SSLError) for item in chain):
+        category = "TLS"
+    elif any(isinstance(item, TimeoutError) or type(item).__name__ in {"ConnectTimeout", "ReadTimeout", "WriteTimeout", "PoolTimeout", "TimeoutException"} for item in chain):
+        category = "TIMEOUT"
+    elif any(type(item).__name__ in TRANSPORT_ERROR_NAMES for item in chain):
+        category = "HTTP_TRANSPORT"
+    elif "HTTPStatusError" in kinds:
+        category = "HTTP_STATUS"
+    elif "MCPError" in kinds or "McpError" in kinds:
+        category = "MCP"
+    phase, duration, status = attempt or ("NO_HTTP", 0, None)
+    http_status = f" status:{status}" if status is not None else ""
+    return (f"category:{category} phase:{phase} phase_ms:{duration} "
+            f"open_ms:{elapsed_ms}{http_status} chain:" + "-".join(kinds[:5]))
 
 
 def _data(response):
@@ -338,15 +371,38 @@ async def collect_once(store, call_tool, *, limits=Limits(), first_lane="inbox",
 
 
 async def run_collector(store, client_factory, stop_event, *, limits=Limits(), interval=30, port=None):
-    """Run bounded rounds. The CLI owns signal handlers and the one-writer lock."""
+    """Run mailbox and optional monitoring with independent request budgets."""
+    if __package__:
+        from .observability import SETTINGS_NAME, run_monitor
+    else:
+        from observability import SETTINGS_NAME, run_monitor
+
+    path = getattr(store, 'path', None)
+    state_dir = Path(path).parent if path is not None else None
+    if state_dir is None or not os.path.lexists(state_dir / SETTINGS_NAME):
+        return await _run_mailbox(store, client_factory, stop_event, limits=limits, interval=interval, port=port)
+    monitor = asyncio.create_task(run_monitor(state_dir, stop_event))
+    try:
+        await _run_mailbox(store, client_factory, stop_event, limits=limits, interval=interval, port=port)
+        if not stop_event.is_set():
+            # Mailbox authorization/protocol stop leaves the independent source alive.
+            await stop_event.wait()
+    finally:
+        monitor.cancel()
+        await asyncio.gather(monitor, return_exceptions=True)
+
+
+async def _run_mailbox(store, client_factory, stop_event, *, limits, interval, port):
     if not isinstance(interval, (int, float)) or isinstance(interval, bool) or not math.isfinite(interval) or not 1 <= interval <= 3600:
         raise ValueError("invalid polling interval")
     failures, first_lane = 0, "inbox"
     while not stop_event.is_set():
         stage, result = "CLIENT_CREATE", None
+        open_started = None
         try:
             client = await client_factory()
             stage = "CLIENT_OPEN"
+            open_started = time.monotonic()
             async with client:
                 stage = "ROUND"
                 result = await collect_once(store, client.call_tool, limits=limits, first_lane=first_lane, port=port)
@@ -360,6 +416,10 @@ async def run_collector(store, client_factory, stop_event, *, limits=Limits(), i
             else:
                 state, detail = _failure(error, stage)
                 store.set_health("collector", state, detail)
+                if stage == "CLIENT_OPEN":
+                    attempt = getattr(client, "_bridge_open_attempt", None)
+                    elapsed = int((time.monotonic() - open_started) * 1000)
+                    store.set_health("collector_open_failure", state, _client_open_detail(error, elapsed, attempt))
         # A busy direction can consume the shared time deadline. Alternate
         # priority at every budget size, without adding persistent task state.
         first_lane = "outbox" if first_lane == "inbox" else "inbox"
@@ -508,6 +568,20 @@ async def create_client(endpoint, state_directory, *, allow_login=False):
 
     oauth = BridgeOAuth(mcp_url=endpoint, token_storage=storage,
                         client_name="Mac Coordination Bridge", callback_host="127.0.0.1")
+    def record_attempt(phase, elapsed_ms, status):
+        client._bridge_open_attempt = (phase, elapsed_ms, status)
+
+    token_endpoint = saved["oauth"].get("token_endpoint") if not allow_login and saved else None
     transport = StreamableHttpTransport(endpoint, auth=oauth,
-        httpx_client_factory=metadata_client_factory(endpoint))
-    return Client(transport, timeout=10, init_timeout=300 if allow_login else 10)
+        httpx_client_factory=metadata_client_factory(
+            endpoint, observe=record_attempt if not allow_login else None, token_endpoint=token_endpoint,
+            metadata_timeout=10 if allow_login else COLLECTOR_OPEN_TIMEOUT))
+    # An auto-negotiation probe can expire while its HTTP task is still doing
+    # OAuth discovery. The fallback initialize then owns a different request
+    # clock, so waiting for browser consent does not pause its negotiation limit.
+    # Login uses the supported legacy handshake and one bounded consent window;
+    # Normal collector requests retain auto negotiation and its own limit.
+    client = Client(transport, timeout=330 if allow_login else COLLECTOR_CALL_TIMEOUT,
+                  init_timeout=330 if allow_login else COLLECTOR_OPEN_TIMEOUT,
+                  mode='legacy' if allow_login else 'auto')
+    return client

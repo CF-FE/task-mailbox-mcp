@@ -29,6 +29,8 @@ Codex App 的“钩子”可用于会话查信、结果入本地待发队列等�
 
 当前唯一入口为公子通过 ChatGPT「插件 → ＋ → 添加自定义 MCP 服务器」注册的 Task Mailbox App 连接；其原生 App 绑定已回读确认，实际地址和标识只留私密配置。新入口可由桌面与云端各自选用和授权；当前桌面会话的九项工具发现、whoami／mailbox_usage 已直接通过，指定 Dot 的读取仍单独取证。[官方原生连接流程](https://developers.openai.com/plugins/build/plugins#create-and-test-a-plugin-locally-with-an-mcp-server)
 
+服务增加工具后，在 ChatGPT 网页的原 App 详情页使用刷新工具功能，核对现有连接与启用工具。随后在实际 Dot 会话中确认工具已加载并核其来源权限。托管 Codex Cloud 任务另核任务内工具与授权。两端的上报、读回和证据要求见[云端接入与核验](cloud-plugin/README.md#cloud-onboarding)。[官方 App 工具管理](https://developers.openai.com/api/docs/guides/custom-mcp-server#how-to-use)
+
 [cloud-plugin](cloud-plugin/)中的原 portable `.example` 文件保留为初始来源和桌面 MCP 模板，不再用它们新建另一个“仅限桌面端”的云端替身。若后续确需包装已注册 App，必须从原生文件读取真实 App ID，以 `.app.json` 及 `extensions.com.openai.apps` 绑定，保留该 App 的身份、认证与源；不得把插件 URL 的 ID 改前缀猜成 App ID。
 
 Mac 主动收件、项目感知及显式结果回传由独立 [协调桥](../mac/README.md)承担。它不靠插件本身在空闲时自动运行，不把本地 command hook 打进云端 App 使它再次依赖本地执行。
