@@ -4,21 +4,23 @@
 
 ## 当前状态
 
-2026-11-14（Asia/Shanghai），VPS MCP 已部署 **1.2.1**（`6389171363d7aa25a6943b77a9731bd21c17a0e0`），Mac 本机监控继续运行 **1.2.0**（`50cf2f748eaa93a6381042f40b8e273d04f2f8a9`）。两端沿原连接使用 Win PostgreSQL。VPS Web 关闭，原 OAuth MCP 和来源认证上报保留。本机看板在回环地址免登录、只读读取配置中的项目。
+2026-11-14（Asia/Shanghai），VPS MCP 已部署 **1.2.2**（`6c55ddab6028e97fd59f5736b7dd217bee2ff4bf`），Mac 本机监控运行 **1.2.0**（`50cf2f748eaa93a6381042f40b8e273d04f2f8a9`）。两端使用同一 Win PostgreSQL。VPS 提供原 OAuth MCP 与来源认证上报，Web 关闭。Mac 看板在回环地址免登录，只读访问配置中的项目。
 
 | 层次 | 状态 | 证据及范围 |
 | --- | --- | --- |
-| VPS 发布与入口 | PASS | 1.2.1 的 14 个运行源码摘要匹配，服务 active；启动期间重试 1 次后于 11:39:07 就绪。回环未认证 MCP POST 返回 401，Web 返回 404。1.2.0 公网路由验证见下述工具目录及历史记录。 |
-| 服务端工具目录与原数据 | PASS | 1.2.0 实际认证的 `tools/list` 返回 16 项，`get_task_trace` 含 `execution_id`。原生 `mailbox_usage` 成功返回 8 个任务、8 份结果、24 条事件及 20 条观测、3 个批次。项目概览读回水位 20。 |
-| 1.2.1 服务端诊断 | PASS | 单次回环 POST 留下同 ID 的到达、响应开始和响应完成三条最小字段日志，沿用私有轮转。原桥自然回合的联合取证待完成。 |
-| Mac 看板 | PASS | 回环只读模式、14 个运行源码文件及构建摘要读回通过。原水位 20 和 4 条任务保留。Chromium 实际打开五个视图，无控制台错误。 |
-| 历史真实登录 | PASS | 1.0.1 原桥浏览器授权、`whoami` 与自然回合成功。公子也确认旧公网 Web 登录后看到凡人项目。[真实登录回执](verification/login-recovery-1.0.1.md) |
-| 公网 MCP 与原 collector 持续可用性 | PARTIAL | 公网已有成功业务查询，也有同一窗口的间歇传输失败。原 collector 先后在客户端打开和 `LIST_EVENTS` 阶段出现网络失败，故障原因仍为 UNKNOWN。历史授权成功不能代表每个自然回合已完成。 |
-| 指定客户端和新任务闭环 | PARTIAL | 本机和服务端已部署新合同。已启动会话的宿主工具缓存仍可能缺少 `execution_id`，指定云端 App 的工具刷新与 Dot、本地 Router／Worker、云端 Codex 的真实实例关联、上报、回执、上下游和页面读回仍待联验。 |
-| 端到端延迟 | NOT_RUN | 未取得新真实任务从上报到页面的有效延迟样本，P95 尚未验证。 |
+| VPS 发布与入口 | PASS | 核对固定发布的 15 个运行文件摘要。诊断增量通过 3 项定向检查和 214 项完整测试。首次启动因数据库连接超时退出，随后服务自动重启并就绪。回环未认证 MCP POST 返回 401，VPS Web 返回 404。 |
+| 原工具与数据 | PASS | 实际认证工具目录返回 16 项，服务端 `get_task_trace` 支持 `execution_id`。既有宿主会话可能仍缓存旧 schema。实际读回 PostgreSQL 的 8 个任务、8 份结果、24 条信箱事件。 |
+| 本地原生证据 | PASS | 真实 MCP 查询读回父任务、本地任务、委派和工作流观测，水位 28。工作流本地节点显示 `RESULT_REPORTED`，B 的原完成批次另行对账。 |
+| Dot 精确读回与 Mac 看板 | PASS | Dot 自报观测精确事件已在真实本机看板显示，水位 29。展开证据显示 `self_report`、绑定未验证。浏览器无错误遮罩及控制台错误。 |
+| B 原完成批次 | UNKNOWN | 一次原完成批次请求到达应用。服务返回 `STORAGE_UNAVAILABLE`，此前读回未看到该精确事件。最终持久化回执及精确事件仍待确认。 |
+| VPS 到 Win 转发 | PARTIAL | 上述请求在原转发 SSH 因远端无响应退出后约 31 毫秒记录数据库连接失效，转发随后由 systemd 重启。该关联覆盖此次存储失败。原 collector 在打开客户端和 `LIST_EVENTS` 阶段的其他间歇传输故障仍待定位。 |
+| Cloud 原生创建 | UNKNOWN | 原创建调用等待 3600 秒超时，未返回原生任务或宿主 ID。实际创建、检出、工具及技能均待核实。 |
+| 历史真实登录 | PASS | 1.0.1 原桥浏览器授权、`whoami` 与自然回合成功。公子确认旧公网 Web 登录后看到凡人项目。[真实登录回执](verification/login-recovery-1.0.1.md) |
+| 端到端延迟 | NOT_RUN | 当前无足够真实观测到页面的样本测算 P95。 |
+
+整轮联验为 `PARTIAL`。原生回读、Dot 自报、B 完成持久化、Cloud 创建与业务验收分别取证。
 
 [本机部署记录](verification/local-monitor.md)保留 1.1.0 切换过程。[协作平台首期验证](verification/platform-v1.md)保留统一库切换证据，[PostgreSQL T1 验证](verification/postgres-platform.md)记录宿主部署前置。实例权限和查询语义见[接入合同](implementation/agent-onboarding.md)。
-
 
 ## 历史记录（截至 2026-11-06）
 
