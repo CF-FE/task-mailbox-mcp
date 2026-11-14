@@ -13,7 +13,7 @@ from starlette.exceptions import HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 
 from .models import (
-    FIELDS, Blocker, Cursor, ErrorEnvelope, EventHint, Id, ObservationBatch,
+    FIELDS, Blocker, Cursor, ErrorEnvelope, EventHint, Id, LocalSession, ObservationBatch,
     Overview, Project, Receipt, RoleActivity, Session, Snapshot, TaskTrace, WorkflowRun,
 )
 
@@ -30,8 +30,8 @@ class APIError(Exception):
         self.login_url = login_url
 
 
-def build_api(service, access):
-    app = FastAPI(title="Task Collaboration Platform", version="1.0.1",
+def build_api(service, access, *, local=False):
+    app = FastAPI(title="Task Collaboration Platform", version="1.1.0",
                   openapi_url="/api/v1/openapi.json", docs_url=None, redoc_url=None,
                   responses={401: {"model": ErrorEnvelope}, 403: {"model": ErrorEnvelope},
                              404: {"model": ErrorEnvelope}, 422: {"model": ErrorEnvelope},
@@ -73,21 +73,22 @@ def build_api(service, access):
         return error_response(APIError(error.status_code, "HTTP_ERROR", str(error.detail)),
                               request.state.request_id)
 
-    @app.get("/api/v1/session", response_model=Session)
+    @app.get("/api/v1/session", response_model=LocalSession if local else Session)
     def session(request: Request):
         return access.session(request)
 
-    @app.get("/api/v1/session/login", status_code=302)
-    def login(request: Request):
-        return access.login(request)
+    if not local:
+        @app.get("/api/v1/session/login", status_code=302)
+        def login(request: Request):
+            return access.login(request)
 
-    @app.post("/api/v1/session/logout", status_code=204)
-    def logout(request: Request):
-        return access.logout(request)
+        @app.post("/api/v1/session/logout", status_code=204)
+        def logout(request: Request):
+            return access.logout(request)
 
-    @app.get("/auth/callback", status_code=303)
-    def callback(request: Request):
-        return access.callback(request)
+        @app.get("/auth/callback", status_code=303)
+        def callback(request: Request):
+            return access.callback(request)
 
     @app.get("/api/v1/projects", response_model=Snapshot[list[Project]])
     def projects(request: Request, cursor: Cursor = "0", limit: Limit = 50):
@@ -147,35 +148,38 @@ def build_api(service, access):
         return StreamingResponse(stream(), media_type="text/event-stream",
                                  headers={"X-Accel-Buffering": "no"})
 
-    @app.post("/api/v1/observations/batches", response_model=Receipt,
-              responses={409: {"model": ErrorEnvelope}, 413: {"model": ErrorEnvelope}},
-              openapi_extra={"requestBody": {"required": True, "content": {"application/json": {
-                  "schema": {"$ref": "#/components/schemas/ObservationBatch"}}}},
-                  "security": [{"SourceBearer": []}]})
-    async def batch(request: Request):
-        source = access.source(request)
-        body = bytearray()
-        async for chunk in request.stream():
-            if len(body) + len(chunk) > MAX_BATCH_BYTES:
-                raise APIError(413, "BATCH_TOO_LARGE", "Maximum batch size is 1 MiB")
-            body.extend(chunk)
-        return await run_in_threadpool(service.ingest, source, bytes(body))
+    if not local:
+        @app.post("/api/v1/observations/batches", response_model=Receipt,
+                  responses={409: {"model": ErrorEnvelope}, 413: {"model": ErrorEnvelope}},
+                  openapi_extra={"requestBody": {"required": True, "content": {"application/json": {
+                      "schema": {"$ref": "#/components/schemas/ObservationBatch"}}}},
+                      "security": [{"SourceBearer": []}]})
+        async def batch(request: Request):
+            source = access.source(request)
+            body = bytearray()
+            async for chunk in request.stream():
+                if len(body) + len(chunk) > MAX_BATCH_BYTES:
+                    raise APIError(413, "BATCH_TOO_LARGE", "Maximum batch size is 1 MiB")
+                body.extend(chunk)
+            return await run_in_threadpool(service.ingest, source, bytes(body))
 
-    @app.get("/api/v1/observations/batches/{batch_id}", response_model=Receipt,
-             openapi_extra={"security": [{"SourceBearer": []}]})
-    def receipt(request: Request, batch_id: Id):
-        return service.receipt(access.source(request), batch_id)
+        @app.get("/api/v1/observations/batches/{batch_id}", response_model=Receipt,
+                 openapi_extra={"security": [{"SourceBearer": []}]})
+        def receipt(request: Request, batch_id: Id):
+            return service.receipt(access.source(request), batch_id)
 
     original_openapi = app.openapi
 
     def openapi():
         schema = original_openapi()
         schemas = schema["components"]["schemas"]
-        for model in (ObservationBatch, EventHint):
+        for model in ((EventHint,) if local else (ObservationBatch, EventHint)):
             definition = model.model_json_schema(ref_template="#/components/schemas/{model}")
             for name, component in definition.pop("$defs", {}).items():
                 schemas.setdefault(name, component)
             schemas[model.__name__] = definition
+        if local:
+            return schema
         schema["components"]["securitySchemes"] = {
             "SourceBearer": {"type": "http", "scheme": "bearer"},
             "WebSession": {"type": "apiKey", "in": "cookie", "name": "mailbox_web"},

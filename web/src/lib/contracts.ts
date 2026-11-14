@@ -41,11 +41,18 @@ export function envelope<T extends z.ZodType>(data: T) {
   })
 }
 
-export const sessionSchema = z.object({
-  github_login: z.string(),
-  subject: z.string(),
-  allowed_projects: z.array(id),
-})
+export const sessionSchema = z.union([
+  z.object({
+    mode: z.literal("local"),
+    allowed_projects: z.array(id),
+  }),
+  z.object({
+    mode: z.undefined().optional(),
+    github_login: z.string(),
+    subject: z.string(),
+    allowed_projects: z.array(id),
+  }),
+])
 export const projectSchema = z.object({
   id,
   name: text,

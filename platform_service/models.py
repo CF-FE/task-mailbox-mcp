@@ -282,6 +282,11 @@ class Session(DTO):
     csrf_token: str
 
 
+class LocalSession(DTO):
+    mode: Literal["local"] = "local"
+    allowed_projects: list[Id]
+
+
 class Error(DTO):
     code: str
     message: str

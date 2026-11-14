@@ -119,7 +119,7 @@ function ProjectView({ project, page, id }: { project: Project; page: Page; id: 
   </main>
 }
 
-function Catalog({ account, allowed }: { account: string; allowed: string[] }) {
+function Catalog({ viewerLabel, allowed }: { viewerLabel: string; allowed: string[] }) {
   const catalog = usePages(["catalog"], "projects", projectSchema)
   const route = useRoute()
   const forbidden = catalog.error instanceof ApiError && [401, 403].includes(catalog.error.status)
@@ -149,7 +149,7 @@ function Catalog({ account, allowed }: { account: string; allowed: string[] }) {
             </select>
           </label>
           {more && <Button variant="outline" size="sm" onClick={() => void catalog.fetchNextPage()} disabled={catalog.isFetching}>加载更多项目</Button>}
-          <span className="muted break-content">{account}</span>
+          <span className="muted break-content">{viewerLabel}</span>
         </div>
       </div>
       {selected && !forbidden && <nav aria-label="监控视图" className="mx-auto flex max-w-[1440px] gap-1 overflow-x-auto px-4 pb-2 sm:px-8">
@@ -187,7 +187,7 @@ function App() {
     refetchInterval: 60_000,
   })
   const denied = session.error instanceof ApiError && [401, 403].includes(session.error.status)
-  const account = session.data
+  const viewer = session.data
   const qc = useQueryClient()
 
   // Unmount the protected views before dropping their cached query results.
@@ -200,8 +200,10 @@ function App() {
 
   return <>
     {import.meta.env.DEV && import.meta.env.MODE === "fixture" && <p className="border-b border-[#e6ceaa] bg-[#fff7e9] px-4 py-2 text-center text-sm text-[#805209]">开发 fixture · 合成测试数据</p>}
-    {account && !denied
-      ? <Catalog key={account.subject} account={account.github_login} allowed={account.allowed_projects} />
+    {viewer && !denied
+      ? <Catalog key={viewer.mode === "local" ? "local" : viewer.subject}
+          viewerLabel={viewer.mode === "local" ? "本机只读" : viewer.github_login}
+          allowed={viewer.allowed_projects} />
       : <div className="mx-auto grid max-w-3xl gap-6 px-4 py-10 sm:px-8">
         <Brand />
         {session.error instanceof ApiError && session.error.status === 401
