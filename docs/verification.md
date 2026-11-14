@@ -4,13 +4,13 @@
 
 ## 当前状态
 
-2026-11-14（Asia/Shanghai），VPS MCP 已部署 **1.2.2**（`6c55ddab6028e97fd59f5736b7dd217bee2ff4bf`），Mac 本机监控运行 **1.2.0**（`50cf2f748eaa93a6381042f40b8e273d04f2f8a9`）。两端使用同一 Win PostgreSQL。VPS 提供原 OAuth MCP 与来源认证上报，Web 关闭。Mac 看板在回环地址免登录，只读访问配置中的项目。
-
-待部署候选 **1.2.3** 为 VPS 应用诊断补丁。旧信箱工具的 PostgreSQL 异常沿用脱敏分类日志，记录工具名、故障分类、可用 SQLSTATE 和服务端诊断 ID，保留原客户端错误码及正文。实际生产部署仍见上文。
+2026-11-14（Asia/Shanghai），VPS MCP 已部署 **1.2.3**（`812b439771ebafa8e7573c7e6a8a55fc0917e38b`），Mac 本机监控运行 **1.2.0**（`50cf2f748eaa93a6381042f40b8e273d04f2f8a9`）。两端使用同一 Win PostgreSQL。VPS 提供原 OAuth MCP 与来源认证上报，Web 关闭。Mac 看板在回环地址免登录，只读访问配置中的项目。
 
 | 层次 | 状态 | 证据及范围 |
 | --- | --- | --- |
-| VPS 发布与入口 | PASS | 核对固定发布的 15 个运行文件摘要。诊断增量通过 3 项定向检查和 214 项完整测试。首次启动因数据库连接超时退出，随后服务自动重启并就绪。回环未认证 MCP POST 返回 401，VPS Web 返回 404。 |
+| VPS 发布与入口 | PASS | 1.2.3 的 215 项测试通过。生产 15 项运行文件摘要、服务身份导入版本和实际进程路径匹配，原配置摘要一致。首次启动记录 PostgreSQL `connection_timeout`，服务以 `75/TEMPFAIL` 退出，systemd 自动重试一次，于 14:35:20 通过应用健康检查。未认证 MCP POST 返回 401，VPS Web 返回 404。 |
+| 原云端 App 信箱查询 | PASS | 发布前 14:30:06–14:30:26，原入口 `list_events(cursor=24, limit=10)` 返回 `STORAGE_UNAVAILABLE`。同入口于 14:36:01–14:36:04 实读成功，返回 `events=[]`、`next_cursor=24`、`has_more=false`。无 ACK、游标写入或计划修改。定时 Dot 是否恢复、原通路持续稳定性仍待验证。 |
+| 旧工具存储诊断 | PASS | 隔离回归确认 1.2.3 为旧信箱 PostgreSQL 异常记录工具名、固定分类、可用 SQLSTATE 和服务端诊断 ID，保留原客户端错误码及正文。生产日志读到启动分类，本次观察窗内未见新的旧工具分类样本。 |
 | 原工具与数据 | PASS | 实际认证工具目录返回 16 项，服务端 `get_task_trace` 支持 `execution_id`。既有宿主会话可能仍缓存旧 schema。实际读回 PostgreSQL 的 8 个任务、8 份结果、24 条信箱事件。 |
 | 本地原生证据 | PASS | 真实 MCP 查询读回父任务、本地任务、委派和工作流观测，水位 28。工作流本地节点显示 `RESULT_REPORTED`，B 的原完成批次另行对账。 |
 | Dot 精确读回与 Mac 看板 | PASS | Dot 自报观测精确事件已在真实本机看板显示，水位 29。展开证据显示 `self_report`、绑定未验证。浏览器无错误遮罩及控制台错误。 |
