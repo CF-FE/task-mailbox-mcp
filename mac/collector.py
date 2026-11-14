@@ -8,6 +8,8 @@ import json
 import math
 import os
 from pathlib import Path
+import socket
+import ssl
 import stat
 import sqlite3
 import time
@@ -154,6 +156,32 @@ def _failure(error, stage):
     kind = type(error).__name__
     safe_type = kind if kind in ERROR_TYPES else "UNKNOWN"
     return state, f"{cause} stage:{safe_stage} type:{safe_type}"
+
+
+def _client_open_detail(error, elapsed_ms, attempt):
+    """Return only bounded stage, exception and status metadata."""
+    chain = list(_error_chain(error))
+    known = ERROR_TYPES | TRANSPORT_ERROR_NAMES | {"gaierror", "SSLError", "SSLCertVerificationError",
+                                                  "HTTPStatusError", "MCPError"}
+    kinds = list(dict.fromkeys(type(item).__name__ if type(item).__name__ in known else "UNKNOWN"
+                               for item in chain))
+    category = "UNKNOWN"
+    if any(isinstance(item, socket.gaierror) for item in chain):
+        category = "DNS"
+    elif any(isinstance(item, ssl.SSLError) for item in chain):
+        category = "TLS"
+    elif any(isinstance(item, TimeoutError) or type(item).__name__ in {"ConnectTimeout", "ReadTimeout", "WriteTimeout", "PoolTimeout", "TimeoutException"} for item in chain):
+        category = "TIMEOUT"
+    elif any(type(item).__name__ in TRANSPORT_ERROR_NAMES for item in chain):
+        category = "HTTP_TRANSPORT"
+    elif "HTTPStatusError" in kinds:
+        category = "HTTP_STATUS"
+    elif "MCPError" in kinds or "McpError" in kinds:
+        category = "MCP"
+    phase, duration, status = attempt or ("NO_HTTP", 0, None)
+    http_status = f" status:{status}" if status is not None else ""
+    return (f"category:{category} phase:{phase} phase_ms:{duration} "
+            f"open_ms:{elapsed_ms}{http_status} chain:" + "-".join(kinds[:5]))
 
 
 def _data(response):
@@ -365,9 +393,11 @@ async def _run_mailbox(store, client_factory, stop_event, *, limits, interval, p
     failures, first_lane = 0, "inbox"
     while not stop_event.is_set():
         stage, result = "CLIENT_CREATE", None
+        open_started = None
         try:
             client = await client_factory()
             stage = "CLIENT_OPEN"
+            open_started = time.monotonic()
             async with client:
                 stage = "ROUND"
                 result = await collect_once(store, client.call_tool, limits=limits, first_lane=first_lane, port=port)
@@ -381,6 +411,10 @@ async def _run_mailbox(store, client_factory, stop_event, *, limits, interval, p
             else:
                 state, detail = _failure(error, stage)
                 store.set_health("collector", state, detail)
+                if stage == "CLIENT_OPEN":
+                    attempt = getattr(client, "_bridge_open_attempt", None)
+                    elapsed = int((time.monotonic() - open_started) * 1000)
+                    store.set_health("collector_open_failure", state, _client_open_detail(error, elapsed, attempt))
         # A busy direction can consume the shared time deadline. Alternate
         # priority at every budget size, without adding persistent task state.
         first_lane = "outbox" if first_lane == "inbox" else "inbox"
@@ -529,13 +563,19 @@ async def create_client(endpoint, state_directory, *, allow_login=False):
 
     oauth = BridgeOAuth(mcp_url=endpoint, token_storage=storage,
                         client_name="Mac Coordination Bridge", callback_host="127.0.0.1")
+    def record_attempt(phase, elapsed_ms, status):
+        client._bridge_open_attempt = (phase, elapsed_ms, status)
+
+    token_endpoint = saved["oauth"].get("token_endpoint") if not allow_login and saved else None
     transport = StreamableHttpTransport(endpoint, auth=oauth,
-        httpx_client_factory=metadata_client_factory(endpoint))
+        httpx_client_factory=metadata_client_factory(
+            endpoint, observe=record_attempt if not allow_login else None, token_endpoint=token_endpoint))
     # An auto-negotiation probe can expire while its HTTP task is still doing
     # OAuth discovery. The fallback initialize then owns a different request
     # clock, so waiting for browser consent does not pause its 10-second limit.
     # Login uses the supported legacy handshake and one bounded consent window;
     # normal collector requests retain their existing short timeout and mode.
-    return Client(transport, timeout=330 if allow_login else 10,
+    client = Client(transport, timeout=330 if allow_login else 10,
                   init_timeout=330 if allow_login else 10,
                   mode='legacy' if allow_login else 'auto')
+    return client

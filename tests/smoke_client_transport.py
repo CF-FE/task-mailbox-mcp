@@ -15,6 +15,23 @@ from metadata_transport import metadata_client_factory
 
 
 class MetadataTransportTests(unittest.IsolatedAsyncioTestCase):
+    async def test_diagnostic_classifies_request_without_recording_values(self):
+        endpoint = 'https://mcp.example.com/mailbox/mcp'
+        token = 'https://mcp.example.com/mailbox/auth/token'
+        attempts = []
+        factory = metadata_client_factory(endpoint, observe=lambda *row: attempts.append(row),
+                                          token_endpoint=token)
+        sender = AsyncMock(side_effect=[httpx2.ConnectError('private.example?token=secret'),
+                                        httpx2.Response(200)])
+        async with factory() as client:
+            with patch.object(httpx2.AsyncClient, '_send_single_request', sender):
+                with self.assertRaises(httpx2.ConnectError):
+                    await client.post(endpoint, json={'method': 'initialize', 'params': {'secret': True}})
+                await client.post(token, data={'refresh_token': 'secret'})
+        self.assertEqual([(phase, status) for phase, _, status in attempts],
+                         [('MCP_INITIALIZE', None), ('OAUTH_REFRESH', 200)])
+        self.assertNotIn('secret', repr(attempts))
+
     async def test_metadata_headers_disconnect_retries_once(self):
         for path in ('/.well-known/oauth-authorization-server/mailbox',
                      '/.well-known/oauth-protected-resource/mailbox/mcp'):

@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import socket
+import ssl
 from pathlib import Path
 import sys
 import tempfile
@@ -10,7 +12,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from mac.bridge_store import BridgeStore
-from mac.collector import AuthFailed, AuthRequired, Limits, ProtocolError, collect_once, run_collector
+from mac.collector import AuthFailed, AuthRequired, Limits, ProtocolError, collect_once, run_collector, _client_open_detail
 from test_collector import FakeTransport, event, job
 
 
@@ -142,6 +144,34 @@ class CollectorRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('LOGIN_REQUIRED', health['detail'])
         self.assertIn('stage:CLIENT_CREATE', health['detail'])
         self.assertIn('type:AuthRequired', health['detail'])
+
+    async def test_client_open_records_safe_cause_chain_and_duration(self):
+        stop = asyncio.Event()
+
+        class Client:
+            _bridge_open_attempt = ("MCP_INITIALIZE", 123, None)
+
+            async def __aenter__(self):
+                stop.set()
+                try:
+                    raise socket.gaierror("private.example?token=secret")
+                except socket.gaierror as error:
+                    raise RuntimeError("secret wrapper") from error
+
+            async def __aexit__(self, *args):
+                return False
+
+        async def factory():
+            return Client()
+
+        await run_collector(self.store, factory, stop)
+        health = {h['component']: h for h in self.store.snapshot()['health']}
+        detail = health['collector_open_failure']['detail']
+        self.assertIn('category:DNS phase:MCP_INITIALIZE phase_ms:123 open_ms:', detail)
+        self.assertIn('chain:RuntimeError-gaierror', detail)
+        self.assertNotIn('secret', detail)
+        self.assertEqual(health['collector']['state'], 'NETWORK_FAILED')
+        self.assertIn('category:TLS', _client_open_detail(ssl.SSLError('secret'), 1, None))
 
     async def test_auth_open_failure_keeps_safe_cause_and_stage(self):
         class Client:

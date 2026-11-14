@@ -4,7 +4,20 @@
 
 ## 当前状态
 
-2026-11-14（Asia/Shanghai），协作平台使用统一 Win PostgreSQL。本机监控 1.1.0 已在 Mac 回环地址启动，免登录读取凡人原任务；VPS Web 已关闭，原 MCP 和来源上报保留。最新运行与浏览器证据见[本机监控验证](verification/local-monitor.md)。此前两条真实登录均已验证，[1.0.1 登录修复记录](verification/login-recovery-1.0.1.md)保留根因与边界。公网连接的间歇性超时、端到端 P95 和 Cloud 路由业务活动仍独立待验，不因本机页面可用推定已通过。初次统一库切换见[协作平台首期验证](verification/platform-v1.md)，数据库部署前置见 [PostgreSQL T1 验证](verification/postgres-platform.md)。
+2026-11-14（Asia/Shanghai），VPS MCP 与 Mac 本机监控均部署 **1.2.0**，固定源码为 `50cf2f748eaa93a6381042f40b8e273d04f2f8a9`。两端沿原连接使用 Win PostgreSQL。VPS Web 关闭，原 OAuth MCP 和来源认证上报保留。本机看板在回环地址免登录、只读读取配置中的项目。
+
+| 层次 | 状态 | 证据及范围 |
+| --- | --- | --- |
+| VPS 发布与入口 | PASS | 14 个运行源码摘要匹配，服务 active、重启计数 0。公网 MCP 未认证 POST 返回 401，Web、会话和查询路由返回 404。 |
+| 服务端工具目录与原数据 | PASS | 实际认证的 `tools/list` 返回 16 项，`get_task_trace` 含 `execution_id`。原生 `mailbox_usage` 成功返回 8 个任务、8 份结果、24 条事件及 20 条观测、3 个批次。项目概览读回水位 20。 |
+| Mac 看板 | PASS | 回环只读模式、14 个运行源码文件及构建摘要读回通过。原水位 20 和 4 条任务保留。Chromium 实际打开五个视图，无控制台错误。 |
+| 历史真实登录 | PASS | 1.0.1 原桥浏览器授权、`whoami` 与自然回合成功。公子也确认旧公网 Web 登录后看到凡人项目。[真实登录回执](verification/login-recovery-1.0.1.md) |
+| 公网 MCP 与原 collector 持续可用性 | PARTIAL | 公网已有成功业务查询，也有同一窗口的间歇传输失败。原 collector 先后在客户端打开和 `LIST_EVENTS` 阶段出现网络失败，故障原因仍为 UNKNOWN。历史授权成功不能代表每个自然回合已完成。 |
+| 指定客户端和新任务闭环 | PARTIAL | 本机和服务端已部署新合同。已启动会话的宿主工具缓存仍可能缺少 `execution_id`，指定云端 App 的工具刷新与 Dot、本地 Router／Worker、云端 Codex 的真实实例关联、上报、回执、上下游和页面读回仍待联验。 |
+| 端到端延迟 | NOT_RUN | 未取得新真实任务从上报到页面的有效延迟样本，P95 尚未验证。 |
+
+[本机部署记录](verification/local-monitor.md)保留 1.1.0 切换过程。[协作平台首期验证](verification/platform-v1.md)保留统一库切换证据，[PostgreSQL T1 验证](verification/postgres-platform.md)记录宿主部署前置。实例权限和查询语义见[接入合同](implementation/agent-onboarding.md)。
+
 
 ## 历史记录（截至 2026-11-06）
 

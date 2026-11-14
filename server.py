@@ -1,12 +1,15 @@
 """Authenticated MCP transport for durable records; never executes job contents."""
 
+import json
 import logging
 from logging.handlers import RotatingFileHandler
 import os
 from pathlib import Path
 import sqlite3
 import sys
+from time import monotonic
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
@@ -177,6 +180,57 @@ class PublicPrefix:
         await self.app(scope, receive, send)
 
 
+class RequestDiagnostics:
+    """Record request arrival and response delivery for fixed MCP/OAuth routes."""
+
+    def __init__(self, app, prefix):
+        self.app = app
+        self.routes = {
+            prefix + path: path for path in (
+                "/mcp", "/authorize", "/token", "/register", "/auth/callback",
+            )
+        }
+        self.routes["/.well-known/oauth-authorization-server" + prefix] = "/.well-known/oauth-authorization-server"
+        self.routes["/.well-known/oauth-protected-resource" + prefix + "/mcp"] = "/.well-known/oauth-protected-resource"
+        self.logger = logging.getLogger("task_mailbox.request")
+
+    async def __call__(self, scope, receive, send):
+        route = self.routes.get(scope["path"]) if scope["type"] == "http" else None
+        if route is None:
+            await self.app(scope, receive, send)
+            return
+        method = scope["method"]
+        details = {
+            "request_id": uuid4().hex,
+            "method": method if method in {"GET", "POST", "DELETE", "HEAD", "OPTIONS"} else "OTHER",
+            "route": route,
+        }
+        started = monotonic()
+        status = None
+        final_body = False
+        self.logger.info("%s", json.dumps({"phase": "arrived", **details}))
+
+        async def observe_send(message):
+            nonlocal status, final_body
+            await send(message)
+            if message["type"] == "http.response.start":
+                status = message["status"]
+                self.logger.info("%s", json.dumps({
+                    "phase": "response_started", **details, "status": status,
+                    "duration_ms": round((monotonic() - started) * 1000, 3),
+                }))
+            elif message["type"] == "http.response.body" and not message.get("more_body", False):
+                final_body = True
+
+        try:
+            await self.app(scope, receive, observe_send)
+        finally:
+            self.logger.info("%s", json.dumps({
+                "phase": "response_finished" if final_body else "response_incomplete",
+                **details, "status": status, "duration_ms": round((monotonic() - started) * 1000, 3),
+            }))
+
+
 def configured_app():
     required = ("TASK_MAILBOX_PUBLIC_BASE_URL", "TASK_MAILBOX_GITHUB_CLIENT_ID",
                 "TASK_MAILBOX_GITHUB_CLIENT_SECRET", "TASK_MAILBOX_ALLOWED_GITHUB_USER",
@@ -249,7 +303,13 @@ def configured_app():
 
         app = PlatformRoutes(app, build_api(*platform),
                              ui_root=ui_root, prefix=parsed.path, web_enabled=web_enabled)
-    return PublicPrefix(app, parsed.path)
+    diagnostic_setting = os.environ.get("TASK_MAILBOX_REQUEST_DIAGNOSTICS", "false").lower()
+    if diagnostic_setting not in {"true", "false"}:
+        raise ValueError("TASK_MAILBOX_REQUEST_DIAGNOSTICS must be true or false")
+    public_app = PublicPrefix(app, parsed.path)
+    if diagnostic_setting == "true":
+        return RequestDiagnostics(public_app, parsed.path)
+    return public_app
 
 
 def configured_platform(public, values, signing_key):
@@ -305,6 +365,8 @@ if __name__ == "__main__":
         maxBytes=1024 * 1024, backupCount=2, encoding="utf-8")
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
     logging.basicConfig(handlers=[handler], level=logging.WARNING, force=True)
+    if isinstance(app, RequestDiagnostics):
+        app.logger.setLevel(logging.INFO)
     logging.getLogger("fastmcp").setLevel(logging.WARNING)
     logging.captureWarnings(True)
     # Bind only on the host. HTTPS ingress is separately configured and verified.
