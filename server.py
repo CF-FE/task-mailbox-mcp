@@ -222,6 +222,10 @@ def configured_app():
     if backend not in ("sqlite", "postgresql"):
         raise ValueError("TASK_MAILBOX_STORAGE_ENGINE must be sqlite or postgresql")
     platform = None
+    web_setting = os.environ.get("TASK_PLATFORM_WEB_ENABLED", "true").lower()
+    if web_setting not in ("true", "false"):
+        raise ValueError("TASK_PLATFORM_WEB_ENABLED must be true or false")
+    web_enabled = web_setting == "true"
     ui_root = os.environ.get("TASK_PLATFORM_UI_ROOT")
     platform_settings = (
         "TASK_PLATFORM_DATABASE_URL", "TASK_PLATFORM_ACCESS_FILE", "TASK_PLATFORM_UI_ROOT",
@@ -244,7 +248,7 @@ def configured_app():
         from platform_service.http import build_api
 
         app = PlatformRoutes(app, build_api(*platform),
-                             ui_root=ui_root, prefix=parsed.path)
+                             ui_root=ui_root, prefix=parsed.path, web_enabled=web_enabled)
     return PublicPrefix(app, parsed.path)
 
 

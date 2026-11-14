@@ -222,10 +222,11 @@ class Access:
 class PlatformRoutes:
     """Dispatch the new API and leave the existing MCP ASGI lifespan intact."""
 
-    def __init__(self, mcp, api, *, ui_root=None, prefix=""):
+    def __init__(self, mcp, api, *, ui_root=None, prefix="", web_enabled=True):
         self.mcp, self.api = mcp, api
+        self.web_enabled = web_enabled
         self.ui = None
-        if ui_root:
+        if ui_root and web_enabled:
             root = Path(ui_root)
             if not root.is_absolute() or not (root / "index.html").is_file():
                 raise ValueError("TASK_PLATFORM_UI_ROOT must be an absolute build directory with index.html")
@@ -243,13 +244,26 @@ class PlatformRoutes:
         if scope["type"] == "http":
             path = scope["path"]
             if path.startswith("/api/v1/"):
+                source_route = (
+                    path == "/api/v1/observations/batches" and scope["method"] == "POST"
+                    or path.startswith("/api/v1/observations/batches/") and scope["method"] == "GET"
+                )
+                if not self.web_enabled and not source_route:
+                    await Response(status_code=404, headers={"Cache-Control": "no-store"})(scope, receive, send)
+                    return
                 await self.api(scope, receive, send)
+                return
+            if not self.web_enabled and (path == "/ui" or path.startswith("/ui/")):
+                await Response(status_code=404, headers={"Cache-Control": "no-store"})(scope, receive, send)
                 return
             if self.ui is not None and (path == "/ui" or path.startswith("/ui/")):
                 await self.ui(scope, receive, send)
                 return
             if path == "/auth/callback":
                 if Request(scope).query_params.get("state", "").startswith(Access.state_prefix):
+                    if not self.web_enabled:
+                        await Response(status_code=404, headers={"Cache-Control": "no-store"})(scope, receive, send)
+                        return
                     await self.api(scope, receive, send)
                     return
         await self.mcp(scope, receive, send)
