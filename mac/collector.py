@@ -24,6 +24,10 @@ class AuthFailed(RuntimeError):
     """Existing bridge authorization was rejected; interactive login is required."""
 
 
+COLLECTOR_CALL_TIMEOUT = 75
+COLLECTOR_ROUND_TIMEOUT = 155
+
+
 class BudgetExhausted(RuntimeError):
     pass
 
@@ -37,8 +41,8 @@ class Limits:
     page_size: int = 25
     pages: int = 4
     rpc: int = 10
-    call_timeout: float = 10
-    round_timeout: float = 20
+    call_timeout: float = COLLECTOR_CALL_TIMEOUT
+    round_timeout: float = COLLECTOR_ROUND_TIMEOUT
 
     def __post_init__(self):
         for name, maximum in (("page_size", 100), ("pages", 20), ("rpc", 100)):
@@ -574,8 +578,8 @@ async def create_client(endpoint, state_directory, *, allow_login=False):
     # OAuth discovery. The fallback initialize then owns a different request
     # clock, so waiting for browser consent does not pause its 10-second limit.
     # Login uses the supported legacy handshake and one bounded consent window;
-    # normal collector requests retain their existing short timeout and mode.
-    client = Client(transport, timeout=330 if allow_login else 10,
+    # Normal collector requests retain auto negotiation and its own limit.
+    client = Client(transport, timeout=330 if allow_login else COLLECTOR_CALL_TIMEOUT,
                   init_timeout=330 if allow_login else 10,
                   mode='legacy' if allow_login else 'auto')
     return client

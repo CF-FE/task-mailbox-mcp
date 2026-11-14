@@ -9,14 +9,12 @@ import unittest
                          ("fastapi", "sqlalchemy", "psycopg")), "requires platform dependencies")
 class StorageDiagnosticsTest(unittest.TestCase):
     def test_receipt_storage_error_logs_operation_and_valid_sqlstate_only(self):
+        from psycopg.errors import ConnectionTimeout
         from fastapi.testclient import TestClient
         from sqlalchemy.exc import OperationalError, TimeoutError
         from platform_service.http import build_api
 
         class DriverError(Exception):
-            pass
-
-        class ConnectionTimeout(Exception):
             pass
 
         class Access:
@@ -47,8 +45,16 @@ class StorageDiagnosticsTest(unittest.TestCase):
                                               headers={"Authorization": "Bearer private-token"})
                     self.assertEqual(response.status_code, 503)
                     self.assertEqual(response.json()["error"]["code"], "STORAGE_UNAVAILABLE")
-                    self.assertEqual(len(records.records), 1)
-                    record = json.loads(records.records[0].getMessage())
+                    retry_expected = expected in {"connection_invalidated", "connection_timeout"}
+                    self.assertEqual(len(records.records), 2 if retry_expected else 1)
+                    if retry_expected:
+                        retry_record = json.loads(records.records[0].getMessage())
+                        self.assertRegex(retry_record.pop("request_id"), r"^[0-9a-f]{32}$")
+                        self.assertEqual(retry_record, {
+                            "operation": "receipt", "category": expected, "sqlstate": None,
+                            "next_attempt": 2,
+                        })
+                    record = json.loads(records.records[-1].getMessage())
                     self.assertEqual(record, {
                         "operation": "receipt", "request_id": response.json()["request_id"],
                         "category": expected, "sqlstate": "55P03" if expected == "database_sqlstate" else None,

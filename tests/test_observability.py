@@ -115,6 +115,33 @@ class ObservationTests(unittest.TestCase):
         self.assertEqual(calls, ['GET', 'POST'])
         self.assertIsNone(self.store.next_batch(self.source))
 
+    def test_request_wall_timeout_stops_body_and_preserves_batch(self):
+        self.store.enqueue(self.source, {'event_id': 'timeout'})
+        batch = self.store.next_batch(self.source)
+        calls = []
+
+        class Response:
+            status_code = 200
+            is_success = True
+
+            async def aiter_bytes(self):
+                yield b'{'
+                await asyncio.sleep(1)
+
+        class Client:
+            @asynccontextmanager
+            async def stream(self, method, url, content=None):
+                calls.append(method)
+                yield Response()
+
+        async def send(method, suffix, body=None):
+            return await observability.request(Client(), self.settings, method, suffix, body)
+
+        with patch.object(observability, 'REQUEST_TIMEOUT', 0.01), self.assertRaises(TimeoutError):
+            asyncio.run(observability.flush_one(self.store, self.settings, send))
+        self.assertEqual(calls, ['GET'])
+        self.assertEqual(self.store.next_batch(self.source), batch)
+
     def test_receipt_mismatch_preserves_original_batch(self):
         for name in ('a', 'b'):
             self.store.enqueue(self.source, {'event_id': name})

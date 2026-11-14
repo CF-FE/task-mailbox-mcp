@@ -24,6 +24,7 @@ from fastmcp.server.auth.providers.jwt import StaticTokenVerifier
 from fastmcp.server.auth.providers.github import GitHubProvider
 from key_value.aio.stores.memory import MemoryStore
 import httpx2 as httpx
+from psycopg.errors import ConnectionFailure
 from sqlalchemy import event
 from uuid import uuid4
 
@@ -395,6 +396,28 @@ def test_unified_mailbox_gate(engine):
         async with Client(endpoint, auth="legacy-token", timeout=SMOKE_CALL_TIMEOUT) as legacy:
             await check_legacy_tools(legacy, LEGACY | PLATFORM, 0,
                                      {"allowed_projects": ["project"], "reporting_sources": []})
+            before = store.stats()
+            commit = engine.dialect.do_commit
+            commit_calls = 0
+
+            def lose_first_commit_reply(connection):
+                nonlocal commit_calls
+                commit(connection)
+                commit_calls += 1
+                if commit_calls == 1:
+                    raise ConnectionFailure("synthetic loss after PostgreSQL committed")
+
+            args = {"job_id": "mcp-test", "event_id": "commit-reply-lost",
+                    "status": "REPORTED_COMPLETED", "result": {"x": "original"}}
+            with patch.object(engine.dialect, "do_commit", side_effect=lose_first_commit_reply):
+                result = (await legacy.call_tool("publish_result", args)).data
+            after = store.stats()
+            assert commit_calls == 2
+            assert result["version"] == 2 and result["event_id"] == args["event_id"]
+            assert store.get_result("mcp-test", 2) == result
+            assert after["results"] == before["results"] + 1
+            assert after["events"] == before["events"] + 1
+            print("PASS: committed legacy result reconciled once after synthetic commit reply loss")
         async with Client(endpoint, auth="other-token", timeout=SMOKE_CALL_TIMEOUT) as other:
             assert (await other.call_tool("get_job", {"job_id": "historical"}, raise_on_error=False)).is_error
 

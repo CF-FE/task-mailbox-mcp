@@ -9,7 +9,7 @@ from sqlalchemy.exc import DBAPIError, TimeoutError as PoolTimeoutError
 LOGGER = logging.getLogger("task_mailbox.storage")
 
 
-def log_storage_failure(operation, request_id, error):
+def log_storage_failure(operation, request_id, error, *, next_attempt=None):
     sqlstate = None
     if isinstance(error, DBAPIError):
         driver = error.orig
@@ -26,6 +26,9 @@ def log_storage_failure(operation, request_id, error):
             category = "driver_error"
     else:
         category = "pool_timeout" if isinstance(error, PoolTimeoutError) else "sqlalchemy_error"
-    LOGGER.warning("%s", json.dumps({
+    record = {
         "operation": operation, "request_id": request_id, "category": category, "sqlstate": sqlstate,
-    }))
+    }
+    if next_attempt is not None:
+        record["next_attempt"] = next_attempt
+    LOGGER.warning("%s", json.dumps(record))

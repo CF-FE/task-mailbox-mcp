@@ -140,6 +140,33 @@ class MetadataTransportTests(unittest.IsolatedAsyncioTestCase):
             browser.assert_called_once_with(url)
             self.assertEqual(0, sender.await_count)
 
+    async def test_checkpoint_round_shares_budget_and_checks_existing_receipt_first(self):
+        from observability_checkpoint import publish
+        calls = []
+        batch = {'batch_id': 'batch-1', 'source_id': 'source-1',
+                 'events': [{'event_id': 'event-1'}]}
+        settings = {'token_file': '/synthetic/unused'}
+        receipt = {'batch_id': 'batch-1', 'source_id': 'source-1', 'persisted': True,
+                   'accepted_event_ids': ['event-1'], 'duplicate_event_ids': []}
+
+        async def slow_request(_client, _settings, method, suffix, body=None):
+            calls.append((method, suffix, body))
+            if method == 'GET':
+                await asyncio.sleep(0.01)
+                return None
+            await asyncio.sleep(0.5)
+
+        with patch('observability_checkpoint.private_bytes', return_value=b'fake-token'):
+            with patch('observability_checkpoint.request', side_effect=slow_request):
+                with patch('observability_checkpoint.ROUND_TIMEOUT', 0.1):
+                    with self.assertRaises(TimeoutError):
+                        await publish(settings, batch)
+            self.assertEqual(calls, [('GET', '/batch-1', None), ('POST', '', batch)])
+            with patch('observability_checkpoint.request', AsyncMock(return_value=receipt)) as req:
+                self.assertEqual(await publish(settings, batch), receipt)
+                self.assertEqual(req.await_count, 1)
+                self.assertEqual(req.call_args.args[2:], ('GET', '/batch-1'))
+
     async def test_default_proxy_tls_and_timeout_inputs_are_preserved(self):
         timeout = httpx2.Timeout(30, read=10)
         with patch.dict('os.environ', {'HTTPS_PROXY': 'http://127.0.0.1:9'}):

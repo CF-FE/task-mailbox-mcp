@@ -70,14 +70,20 @@ def create_server(store, auth, allowed_login, platform=None):
     server.add_middleware(AccountGuard(allowed_login, access))
     storage_errors = (sqlite3.Error,)
     storage_diagnostic = None
+    retry_storage = None
     if platform is not None:
         from sqlalchemy.exc import SQLAlchemyError
+        from platform_service.database import PostgresStore, retry_storage_operation
         from platform_service.storage_diagnostics import log_storage_failure
         storage_errors += (SQLAlchemyError,)
         storage_diagnostic = log_storage_failure
+        if isinstance(store, PostgresStore):
+            retry_storage = retry_storage_operation
 
     def invoke(tool_name, operation, *args):
         try:
+            if retry_storage is not None:
+                return retry_storage(tool_name, operation, *args)
             return operation(*args)
         except KeyError as error:
             raise ToolError("NOT_FOUND: the requested record does not exist") from error
@@ -326,15 +332,19 @@ def configured_platform(public, values, signing_key):
 
     from sqlalchemy.exc import OperationalError, SQLAlchemyError
     from platform_service.access import Access
-    from platform_service.database import REVISION, configured_engine
+    from platform_service.database import REVISION, configured_engine, retry_storage_operation
     from platform_service.observations import Observations
     from platform_service.storage_diagnostics import log_storage_failure
 
     engine = None
     try:
-        engine = configured_engine()
-        with engine.connect() as conn:
-            revision = conn.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
+        engine = configured_engine(service_timeouts=True)
+
+        def read_revision():
+            with engine.connect() as conn:
+                return conn.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
+
+        revision = retry_storage_operation("startup", read_revision)
         if revision != REVISION:
             raise ValueError("PostgreSQL platform schema revision does not match the application")
         stale_seconds = int(os.environ.get("TASK_PLATFORM_SOURCE_STALE_SECONDS", "120"))

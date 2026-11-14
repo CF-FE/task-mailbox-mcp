@@ -54,6 +54,84 @@ class ContractTest(unittest.TestCase):
         self.assertEqual(engine.url.query["gssencmode"], "disable")
         engine.dispose()
 
+    def test_service_connection_limits_do_not_change_local_or_migration_defaults(self):
+        from unittest.mock import patch
+        from platform_service.database import configured_engine
+
+        dsn = "postgresql://example.test/db?sslmode=verify-full&sslrootcert=/fixture/ca.pem"
+        with (
+            patch.dict("os.environ", {"TASK_PLATFORM_DATABASE_URL": dsn}),
+            patch("platform_service.database.create_engine") as create,
+        ):
+            for service, expected in ((True, (20, 5)), (False, (15, 4))):
+                configured_engine(service_timeouts=service)
+                kwargs = create.call_args.kwargs
+                self.assertEqual((kwargs["connect_args"]["connect_timeout"], kwargs["pool_timeout"]),
+                                 expected)
+                self.assertTrue(kwargs["pool_pre_ping"])
+
+    def test_operation_retry_reconciles_using_the_same_write_arguments(self):
+        import json
+        from unittest.mock import patch
+        from psycopg.errors import ConnectionTimeout
+        from sqlalchemy.exc import OperationalError
+        from platform_service.database import retry_storage_operation
+
+        stored = {}
+        invocations = []
+
+        def publish(job_id, event_id, payload):
+            invocations.append((job_id, event_id, payload))
+            if event_id not in stored:
+                stored[event_id] = payload
+                raise OperationalError(None, None, ConnectionTimeout("simulated lost reply"),
+                                       connection_invalidated=True)
+            return stored[event_id]
+
+        payload = {"result": "same input"}
+        with (
+            patch("platform_service.database.sleep") as backoff,
+            self.assertLogs("task_mailbox.storage", level="WARNING") as records,
+        ):
+            result = retry_storage_operation("publish_result", publish, "original-job", "original-event", payload)
+        self.assertEqual(len(records.records), 1)
+        self.assertIsNone(records.records[0].exc_info)
+        record = json.loads(records.records[0].getMessage())
+        self.assertRegex(record.pop("request_id"), r"^[0-9a-f]{32}$")
+        self.assertEqual(record, {"operation": "publish_result", "category": "connection_timeout",
+                                  "sqlstate": None, "next_attempt": 2})
+        self.assertIs(result, payload)
+        self.assertEqual(invocations, [("original-job", "original-event", payload)] * 2)
+        self.assertEqual(stored, {"original-event": payload})
+        backoff.assert_called_once_with(0.25)
+
+    def test_operation_retry_stops_on_nontransient_errors_and_budget_exhaustion(self):
+        from unittest.mock import Mock, patch
+        from psycopg.errors import ConnectionTimeout, InvalidPassword, UniqueViolation
+        from sqlalchemy.exc import DBAPIError, OperationalError, TimeoutError
+        from platform_service.database import retry_storage_operation
+
+        disconnect = OperationalError(None, None, ConnectionTimeout("first attempt"))
+        for error, elapsed, expected_attempts in (
+            (disconnect, 0, 2),
+            (disconnect, 30, 1),
+            (OperationalError(None, None, InvalidPassword(), connection_invalidated=True), 0, 1),
+            (DBAPIError(None, None, UniqueViolation(), connection_invalidated=True), 0, 1),
+            (TimeoutError("pool exhausted"), 0, 1),
+        ):
+            with self.subTest(error=type(error.orig if isinstance(error, DBAPIError) else error),
+                              elapsed=elapsed):
+                operation = Mock(side_effect=error)
+                with (
+                    patch("platform_service.database.monotonic", side_effect=[0, elapsed]),
+                    patch("platform_service.database.sleep") as backoff,
+                    self.assertRaises(type(error)) as caught,
+                ):
+                    retry_storage_operation("list_events", operation, 24, 10)
+                self.assertIs(caught.exception, error)
+                self.assertEqual(operation.call_count, expected_attempts)
+                self.assertEqual(backoff.call_count, expected_attempts - 1)
+
     def test_optional_ui_mount_preserves_api_and_mcp_routes(self):
         from pathlib import Path
         from tempfile import TemporaryDirectory

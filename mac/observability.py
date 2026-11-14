@@ -22,7 +22,8 @@ else:
 SETTINGS_NAME = 'observations.json'
 BUFFER_NAME = 'observations.sqlite3'
 GAP_NAME = 'observations.gap'
-ROUND_TIMEOUT = 20
+REQUEST_TIMEOUT = 75
+ROUND_TIMEOUT = 155
 INTERVAL = 5
 SETTINGS_KEYS = {'schema_version', 'api_base', 'source_id', 'project_id', 'token_file', 'jobs'}
 
@@ -260,15 +261,16 @@ class SourceHTTPError(OSError):
 async def request(client, settings, method, suffix, body=None):
     url = settings['api_base'] + '/observations/batches' + suffix
     content = None if body is None else canonical(body).encode()
-    async with client.stream(method, url, content=content) as response:
-        missing_candidate = method == 'GET' and response.status_code == 404
-        if not response.is_success and not missing_candidate:
-            raise SourceHTTPError(response.status_code)
-        raw = bytearray()
-        async for chunk in response.aiter_bytes():
-            if len(raw) + len(chunk) > MAX_BATCH_BYTES:
-                raise ValueError('observation receipt exceeds the read budget')
-            raw.extend(chunk)
+    async with asyncio.timeout(REQUEST_TIMEOUT):
+        async with client.stream(method, url, content=content) as response:
+            missing_candidate = method == 'GET' and response.status_code == 404
+            if not response.is_success and not missing_candidate:
+                raise SourceHTTPError(response.status_code)
+            raw = bytearray()
+            async for chunk in response.aiter_bytes():
+                if len(raw) + len(chunk) > MAX_BATCH_BYTES:
+                    raise ValueError('observation receipt exceeds the read budget')
+                raw.extend(chunk)
     if not missing_candidate:
         return json.loads(raw)
     try:
@@ -316,7 +318,7 @@ async def monitor_once(state_dir):
     headers = {'Authorization': 'Bearer ' + token, 'Accept': 'application/json',
                'Content-Type': 'application/json'}
     with upload_lock(state_dir):
-        async with httpx2.AsyncClient(headers=headers, timeout=ROUND_TIMEOUT, follow_redirects=False) as client:
+        async with httpx2.AsyncClient(headers=headers, timeout=REQUEST_TIMEOUT, follow_redirects=False) as client:
             async def send(method, suffix, body=None):
                 return await request(client, settings, method, suffix, body)
 

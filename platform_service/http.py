@@ -13,6 +13,7 @@ from starlette.exceptions import HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 
 from . import APP_VERSION
+from .database import retry_storage_operation
 from .storage_diagnostics import log_storage_failure
 from .models import (
     FIELDS, Blocker, Cursor, ErrorEnvelope, EventHint, Id, LocalSession, ObservationBatch,
@@ -173,12 +174,12 @@ def build_api(service, access, *, local=False):
                 if len(body) + len(chunk) > MAX_BATCH_BYTES:
                     raise APIError(413, "BATCH_TOO_LARGE", "Maximum batch size is 1 MiB")
                 body.extend(chunk)
-            return await run_in_threadpool(service.ingest, source, bytes(body))
+            return await run_in_threadpool(retry_storage_operation, "batch", service.ingest, source, bytes(body))
 
         @app.get("/api/v1/observations/batches/{batch_id}", response_model=Receipt,
                  openapi_extra={"security": [{"SourceBearer": []}]})
         def receipt(request: Request, batch_id: Id):
-            return service.receipt(access.source(request), batch_id)
+            return retry_storage_operation("receipt", service.receipt, access.source(request), batch_id)
 
     original_openapi = app.openapi
 

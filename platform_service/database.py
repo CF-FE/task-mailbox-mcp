@@ -4,16 +4,21 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 import os
 from threading import Lock
+from time import monotonic, sleep
+from uuid import uuid4
 
+from psycopg.errors import ConnectionTimeout
 from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import DBAPIError
 
 from mailbox_store import MAX_SQLITE_INTEGER, Store, _json
+from .storage_diagnostics import log_storage_failure
 
 REVISION = "0001_platform"
 
 
-def database_engine(dsn, *, require_tls=False):
+def database_engine(dsn, *, require_tls=False, service_timeouts=False):
     url = make_url(dsn)
     if url.drivername not in ("postgresql", "postgresql+psycopg"):
         raise ValueError("platform database requires PostgreSQL with psycopg")
@@ -25,16 +30,38 @@ def database_engine(dsn, *, require_tls=False):
     url = url.set(drivername="postgresql+psycopg")
     if require_tls:
         url = url.update_query_dict({"gssencmode": "disable"})
-    return create_engine(url,
-                         pool_size=4, max_overflow=2, pool_timeout=4, pool_pre_ping=True,
-                         hide_parameters=True, connect_args={
-                             "connect_timeout": 15,
-                             "options": "-c statement_timeout=5000 -c lock_timeout=4500",
-                         })
+    return create_engine(
+        url, pool_size=4, max_overflow=2, pool_timeout=5 if service_timeouts else 4,
+        pool_pre_ping=True, hide_parameters=True,
+        connect_args={
+            "connect_timeout": 20 if service_timeouts else 15,
+            "options": "-c statement_timeout=5000 -c lock_timeout=4500",
+        },
+    )
 
 
-def configured_engine():
-    return database_engine(os.environ["TASK_PLATFORM_DATABASE_URL"], require_tls=True)
+def retry_storage_operation(tool_name, operation, *args):
+    """Retry one replay-safe operation, reserving time for pool wait and reconnect."""
+    started = monotonic()
+    try:
+        return operation(*args)
+    except DBAPIError as error:
+        sqlstate = getattr(error.orig, "sqlstate", None)
+        if sqlstate is None:
+            transient = error.connection_invalidated or isinstance(error.orig, ConnectionTimeout)
+        else:
+            transient = sqlstate in {"08001", "08003", "08006", "57P01", "57P02", "57P03"}
+        # Reserve 25s for the next pool wait and connection attempt within the 55s budget.
+        if not transient or monotonic() - started + 0.25 > 30:
+            raise
+        log_storage_failure(tool_name, uuid4().hex, error, next_attempt=2)
+    sleep(0.25)
+    return operation(*args)
+
+
+def configured_engine(*, service_timeouts=False):
+    return database_engine(os.environ["TASK_PLATFORM_DATABASE_URL"], require_tls=True,
+                           service_timeouts=service_timeouts)
 
 
 class LegacyRow:

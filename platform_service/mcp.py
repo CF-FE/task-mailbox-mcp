@@ -7,6 +7,7 @@ from fastmcp.server.dependencies import get_access_token
 from sqlalchemy.exc import SQLAlchemyError
 
 from mailbox_store import _json
+from .database import retry_storage_operation
 from .http import APIError
 from .models import Cursor, Id
 from .storage_diagnostics import log_storage_failure
@@ -19,7 +20,7 @@ def add_tools(server, service, access, read, write):
 
     def invoke(tool_name, operation, *args):
         try:
-            return operation(*args).model_dump(mode="json")
+            return retry_storage_operation(tool_name, operation, *args).model_dump(mode="json")
         except APIError as error:
             raise ToolError(f"{error.code}: {error.message}") from None
         except (ValueError, TypeError, RecursionError):

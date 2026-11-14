@@ -9,10 +9,10 @@ import re
 from urllib.parse import quote
 
 if __package__:
-    from .observability import ROUND_TIMEOUT, load_settings, private_bytes, request
+    from .observability import REQUEST_TIMEOUT, ROUND_TIMEOUT, load_settings, private_bytes, request
     from .observability_store import MAX_BATCH_BYTES, stable_id, valid_id
 else:
-    from observability import ROUND_TIMEOUT, load_settings, private_bytes, request
+    from observability import REQUEST_TIMEOUT, ROUND_TIMEOUT, load_settings, private_bytes, request
     from observability_store import MAX_BATCH_BYTES, stable_id, valid_id
 
 
@@ -68,7 +68,9 @@ async def publish(settings, batch):
     headers = {'Authorization': 'Bearer ' + token, 'Accept': 'application/json',
                'Content-Type': 'application/json'}
     try:
-        async with httpx2.AsyncClient(headers=headers, timeout=ROUND_TIMEOUT, follow_redirects=False) as client:
+        async with asyncio.timeout(ROUND_TIMEOUT), httpx2.AsyncClient(
+            headers=headers, timeout=REQUEST_TIMEOUT, follow_redirects=False,
+        ) as client:
             suffix = '/' + quote(batch['batch_id'], safe='')
             receipt = await request(client, settings, 'GET', suffix)
             if receipt is None:
@@ -97,9 +99,7 @@ def main():
         settings = load_settings(args.settings)
         checkpoint = json.loads(private_bytes(args.checkpoint, MAX_BATCH_BYTES))
         batch = checkpoint_batch(settings, args.session_id, checkpoint)
-        async def run():
-            return await asyncio.wait_for(publish(settings, batch), ROUND_TIMEOUT)
-        receipt = asyncio.run(run())
+        receipt = asyncio.run(publish(settings, batch))
     except (OSError, ValueError, TypeError, KeyError) as error:
         parser.exit(1, f'Checkpoint receipt unavailable ({type(error).__name__}). Keep the original input for reconciliation.\n')
     print(json.dumps(receipt))
