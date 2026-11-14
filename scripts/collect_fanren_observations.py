@@ -70,12 +70,6 @@ def collect(case_dir, source_id, *, ledger=None, followup_key=None, ledger_obser
 
     internal_check_at = (on_source_date(datetime.strptime(check.group(1), '%H:%M').time(),
                                         accepted['observed_at']) if check else None)
-    coordinator_clock = re.search(r'原生记录仍停在 (\d{2}:\d{2}:\d{2})', continuation_text)
-    writer_clock = re.search(r'原编剧最新仍是 (\d{2}:\d{2}:\d{2}) 结束的旧', continuation_text)
-
-    def recorded_clock(match):
-        return (on_source_date(datetime.strptime(match.group(1), '%H:%M:%S').time(),
-                               continuation['observed_at']) if match else None)
     c001_review = None
     c001_review_key = 'fanren-C001-direct-impact-20261113'
     if ledger is not None:
@@ -144,16 +138,15 @@ def collect(case_dir, source_id, *, ledger=None, followup_key=None, ledger_obser
     role(owner['role'], owner['role'], 'owner', [accepted], task=task_id, session=owner['thread'],
          state='ACCEPTED', action='负责人 R17 接受 R4 限定结果', progress=accepted['observed_at'],
          binding=owner['role'], last_activity_at=accepted['observed_at'])
-    role(coordinator_id, '原协调员', 'coordinator', role_evidence, task=task_id,
-         session=dispatch['sole_dispatcher']['thread'], state='UNKNOWN', action=f'协调台账 {followup_status} rev{revision}',
-         next_action='沿原协调台账核对并记录负责人验收', last_activity_at=recorded_clock(coordinator_clock))
+    # Current activity for these sessions comes from the Mac hook source.
+    event('role', coordinator_id, {'name': '原协调员', 'kind': 'coordinator',
+          'session_ref': dispatch['sole_dispatcher']['thread']}, role_evidence, source_revision=1)
     role(worker_id, 'R4 原执行回件方', 'worker', [reported], task=task_id,
          session=actual['native_proof']['thread'], state='REVIEW_REQUIRED',
          action='回传四项身份观察',
          progress=reported['observed_at'], last_activity_at=reported['observed_at'])
-    role(writer['name'], writer['name'], 'worker', [continuation], task=s2_id,
-         session=writer['thread'], action='历史编剧入口已记录，S2 接单仍无证据',
-         next_action='原协调员核实原入口并取得 Sol 接单', last_activity_at=recorded_clock(writer_clock))
+    event('role', writer['name'], {'name': writer['name'], 'kind': 'worker',
+          'session_ref': writer['thread']}, [continuation], source_revision=1)
     role('fanren-codex-router', 'Codex 路由', 'router', [continuation],
          action='本轮实际调用者与路由派发证据待核', last_activity_at=None)
     event('source', 'fanren-codex-router', {'kind': 'codex_router', 'state': 'UNKNOWN',
